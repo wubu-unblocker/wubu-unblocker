@@ -1,0 +1,10 @@
+{
+  "title": "Science for Kids",
+  "host": "0.0.0.0",
+  "pathname": "/",
+  "minifyScripts": true,
+  "randomizeIdentifiers": false,
+  "production": true,
+  "disguiseFiles": false,
+  "usingSEO": false
+}

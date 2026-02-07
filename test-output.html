@@ -1,0 +1,184 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wubu | Proxies</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <!--HEAD-CONTENT-->
+    <link rel="stylesheet" href="/assets/css/wubu.css" />
+
+    <!-- Proxy Scripts - V1 Style Fix -->
+    <script src="/baremux/index.js" defer></script>
+    <script src="/scram/scramjet.bundle.js" defer></script>
+    <script src="/uv/networking.bundle.js" defer></script>
+    <script src="/uv/networking.config.js" defer></script>
+
+    <script>window.addEventListener('DOMContentLoaded', async () => { // Wait for BareMux to be available
+const waitForBareMux = () => {
+  return new Promise((resolve) => {
+    if (typeof BareMux !== 'undefined') {
+      resolve();
+      return;
+    }
+    const check = setInterval(() => {
+      if (typeof BareMux !== 'undefined') {
+        clearInterval(check);
+        resolve();
+      }
+    }, 50);
+    // Fallback timeout
+    setTimeout(() => {
+      clearInterval(check);
+      resolve();
+    }, 5000);
+  });
+};
+
+(async () => {
+  console.log('Waiting for BareMux...');
+  await waitForBareMux();
+  console.log('BareMux available:', typeof BareMux);
+
+  const swRoutes = {
+    uv: ['/network/networking.sw.js', '/network/sw-blacklist.js'],
+    sj: ['/scram/working.sw.js', '/scram/working.sw-blacklist.js'],
+  };
+  const swAllowedHostnames = ['localhost', '127.0.0.1'];
+  const wispUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/wisp/';
+  const transports = {
+    'epoxy': '/epoxy/index.mjs',
+    'libcurl': '/libcurl/index.mjs',
+  };
+  const storageId = 'net-time-storage';
+  const storageObject = () => JSON.parse(localStorage.getItem(storageId)) || {};
+  const readStorage = (name) => storageObject()[name];
+  const defaultMode = 'libcurl';
+
+  transports.default = transports[defaultMode];
+
+  const registerSW = async () => {
+    if (!navigator.serviceWorker) {
+      if (location.protocol !== 'https:' && !swAllowedHostnames.includes(location.hostname))
+        throw new Error('Service workers cannot be registered without https.');
+      throw new Error("Your browser doesn't support service workers.");
+    }
+
+    const transportMode = transports[readStorage('Transport')] || transports.default;
+    let transportOptions = { wisp: wispUrl };
+
+    console.log('Transport mode:', transportMode);
+    console.log('Wisp URL:', wispUrl);
+
+    console.log('Creating BareMux connection...');
+    try {
+      const connection = new BareMux.BareMuxConnection('/baremux/worker.js');
+      console.log('BareMux connection created, setting transport...');
+      await connection.setTransport(transportMode, [transportOptions]);
+      console.log('Transport set successfully!');
+    } catch (err) {
+      console.error('BareMux connection failed:', err);
+      throw err;
+    }
+
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    const usedSW = swRoutes.uv[readStorage('HideAds') !== false ? 1 : 0];
+
+    console.log('Registering service worker:', usedSW);
+
+    // Unregister outdated service workers
+    for (const registration of registrations)
+      if (registration.active && new URL(registration.active.scriptURL).pathname !== new URL(usedSW, location.origin).pathname)
+        await registration.unregister();
+
+    await navigator.serviceWorker.register(usedSW);
+    console.log('Service worker registered');
+  };
+
+  try {
+    await registerSW();
+  } catch (err) {
+    console.error('Initialization failed:', err);
+  }
+})();
+ });</script>
+    <script src="/assets/js/dashboard.js" defer></script>
+  </head>
+
+  <body>
+    <!-- Navigation -->
+    <nav class="nav">
+      <a href="/" class="nav-brand">
+        <i class="fas fa-ghost"></i>
+        <span>Wubu</span>
+      </a>
+      <div class="nav-links">
+        <a href="/browsing" class="active">Proxies</a>
+        <a href="/games">Games</a>
+        <a href="/apps">Apps</a>
+        <a href="/blooket">Blooket</a>
+      </div>
+      <div class="nav-actions">
+        <button class="nav-icon" id="settingsBtn" title="Settings">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </nav>
+
+    <main class="container">
+      <h1 class="page-title">Web Proxies</h1>
+      <p class="page-subtitle">
+        Choose a proxy engine and browse the web freely
+      </p>
+
+      <!-- Search Section -->
+      <div class="proxy-section">
+        <div class="search-box" style="max-width: 600px; margin: 0 auto 32px">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Enter URL or search..."
+            autocomplete="off"
+            autofocus
+          />
+          <button class="search-btn" id="searchBtn">Browse</button>
+        </div>
+
+        <p style="color: var(--text-secondary); margin-bottom: 24px">
+          Popular Sites:
+        </p>
+
+        <!-- Preset Cards -->
+        <div class="cards-grid">
+          <div class="card" onclick="quickLink('https://youtube.com')">
+            <div class="card-icon"><i class="fab fa-youtube"></i></div>
+            <h3>YouTube</h3>
+          </div>
+          <div class="card" onclick="quickLink('https://discord.com')">
+            <div class="card-icon"><i class="fab fa-discord"></i></div>
+            <h3>Discord</h3>
+          </div>
+          <div class="card" onclick="quickLink('https://google.com')">
+            <div class="card-icon"><i class="fab fa-google"></i></div>
+            <h3>Google</h3>
+          </div>
+          <div class="card" onclick="quickLink('https://tiktok.com')">
+            <div class="card-icon"><i class="fab fa-tiktok"></i></div>
+            <h3>TikTok</h3>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">Wubu &copy; 2026</footer>
+  </body>
+</html>
+

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <base href="/" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wubu | Error</title>
+  <meta itemprop="http-status" content="404" />
+  <meta name="description"
+    content="Wubu is a secure web proxy service with support for many sites. Bypass filters and freely enjoy a safer private browsing experience." />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --bg-color: #f8fafc;
+      --card-bg: #ffffff;
+      --accent: #6366f1;
+      --text-main: #334155;
+      --text-muted: #64748b;
+      --error-color: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Nav */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      background: white;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .brand {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 25px;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent);
+    }
+
+    /* Error Content */
+    .error-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .error-box {
+      background: white;
+      border-radius: 20px;
+      padding: 50px 60px;
+      text-align: center;
+      max-width: 550px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .error-icon {
+      font-size: 4rem;
+      color: var(--error-color);
+      margin-bottom: 20px;
+      opacity: 0.9;
+    }
+
+    .error-box h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--error-color);
+      margin-bottom: 15px;
+    }
+
+    .error-box h2 {
+      font-size: 1.2rem;
+      font-weight: 500;
+      color: var(--text-main);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .error-box p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      line-height: 1.6;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4f46e5;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-color);
+      color: var(--text-main);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      background: white;
+    }
+
+    @media (max-width: 600px) {
+      nav {
+        padding: 15px 20px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .error-box {
+        padding: 35px 25px;
+      }
+
+      .error-box h1 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <nav>
+    <a href="/" class="brand">
+      <i class="fas fa-ghost"></i>
+      Wubu
+    </a>
+    <div class="nav-links">
+      <a href="/stuff">Browse</a>
+      <a href="/blooket">Blooket</a>
+    </div>
+  </nav>
+
+  <div class="error-container">
+    <div class="error-box">
+      <i class="fas fa-exclamation-triangle error-icon"></i>
+      <h1>Oops!</h1>
+      <h2>Something went wrong</h2>
+      <p>Try reloading the page (Ctrl+R) - this often fixes the issue.</p>
+      <p>If the problem persists, the server might be undergoing maintenance.</p>
+
+      <div class="action-buttons">
+        <button class="btn btn-primary" onclick="location.reload()">
+          <i class="fas fa-redo"></i> Reload Page
+        </button>
+        <a href="/" class="btn btn-secondary">
+          <i class="fas fa-home"></i> Go Home
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Wubu &copy; 2026
+  </footer>
+
+</body>
+
+</html>

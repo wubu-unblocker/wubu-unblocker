@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <title>{{mask}}{{Wubu | Web Proxies}}</title>
+  {{ifSEO}}{{
+  <meta name="description" content="Wubu is a secure web proxy service. Browse freely and securely." />
+  }}
+  <!--HEAD-CONTENT-->
+  {{inline}}{{
+  <script src="{{route}}{{baremux/index.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{scram/scramjet.bundle.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{uv/networking.bundle.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{uv/networking.config.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{assets/js/register-sw.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{assets/js/common.js}}{{inline}}" defer></script>
+  }}
+</head>
+
+<body>
+  <!--ANTI-EXFIL-->
+  <div id="header">
+    <!--HEADER-->
+  </div>
+
+  <main class="container">
+    <h1 class="page-title">Web Proxies</h1>
+    <p class="page-subtitle">
+      Choose a proxy engine and browse the web freely
+    </p>
+
+    <!-- Search Section -->
+    <div class="proxy-section">
+      <div class="search-box" style="max-width: 600px; margin: 0 auto 32px">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="uv-address" placeholder="Enter URL or search..." autocomplete="off" autofocus />
+        <button class="search-btn" id="uv-search-btn">Browse</button>
+      </div>
+
+      <p style="color: var(--text-secondary); margin-bottom: 24px">
+        Popular Sites:
+      </p>
+
+      <!-- Preset Cards -->
+      <div class="cards-grid">
+        <div class="card" onclick="goProx('https://youtube.com')">
+          <div class="card-icon"><i class="fab fa-youtube"></i></div>
+          <h3>YouTube</h3>
+          <p>Watch videos</p>
+        </div>
+        <div class="card" onclick="goProx('https://discord.com')">
+          <div class="card-icon"><i class="fab fa-discord"></i></div>
+          <h3>Discord</h3>
+          <p>Chat with friends</p>
+        </div>
+        <div class="card" onclick="goProx('https://google.com')">
+          <div class="card-icon"><i class="fab fa-google"></i></div>
+          <h3>Google</h3>
+          <p>Search the web</p>
+        </div>
+        <div class="card" onclick="goProx('https://tiktok.com')">
+          <div class="card-icon"><i class="fab fa-tiktok"></i></div>
+          <h3>TikTok</h3>
+          <p>Short videos</p>
+        </div>
+      </div>
+
+      <!-- Proxy Engine Selection -->
+
+    </div>
+  </main>
+
+  <div id="footer">
+    <!--FOOTER-->
+  </div>
+
+  <script>
+    // Utility for search and URL processing
+    function processUrl(url) {
+      if (!url) return '';
+      try { return new URL(url) + ''; } catch { }
+      if (url.includes('.') && !url.includes(' ')) return 'https://' + url;
+      return 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
+    }
+
+    async function goProx(url) {
+      const input = document.getElementById('uv-address');
+      if (input) input.disabled = true;
+
+      const target = processUrl(url);
+
+      // Prioritize UV for stability
+      // If config isn't loaded yet, try to wait a bit
+      let tries = 0;
+      while (!window.__uv$config && tries < 10) {
+        await new Promise(r => setTimeout(r, 100));
+        tries++;
+      }
+
+      if (window.__uv$config) {
+        const encoded = window.__uv$config.prefix + window.__uv$config.encodeUrl(target);
+        // Use relative path for cache param
+        window.location.href = '/s?cache=' + encodeURIComponent(encoded);
+        return;
+      }
+
+      // Fallback to Scramjet if UV is somehow missing
+      try {
+        if (window.$scramjetLoadController) {
+          const { ScramjetController } = await window.$scramjetLoadController();
+          const controller = new ScramjetController({
+            prefix: '/worker/network/'
+          });
+          const encoded = controller.encodeUrl(target);
+          window.location.href = '/s?cache=' + encodeURIComponent(encoded);
+          return;
+        }
+      } catch (e) {
+        console.error("Scramjet Init Error", e);
+      }
+
+      // Last resort: hardcoded UV path (xor encoding)
+      const xorEncode = (str) => {
+        if (!str) return str;
+        return encodeURIComponent(str.split('').map((char, i) => i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char).join(''));
+      };
+      window.location.href = '/s?cache=' + encodeURIComponent('/network/service/' + xorEncode(target));
+    }
+
+    const addrInput = document.getElementById('uv-address');
+    const searchBtn = document.getElementById('uv-search-btn');
+
+    if (addrInput) {
+      addrInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && addrInput.value.trim()) goProx(addrInput.value.trim());
+      });
+    }
+    if (searchBtn) {
+      searchBtn.addEventListener('click', () => {
+        if (addrInput && addrInput.value.trim()) goProx(addrInput.value.trim());
+      });
+    }
+
+    // Handle auto-navigation from home page
+    window.addEventListener('load', async () => {
+      const pending = sessionStorage.getItem('pendingUrl');
+      if (pending) {
+        sessionStorage.removeItem('pendingUrl');
+        if (addrInput) addrInput.value = pending;
+        goProx(pending);
+      }
+    });
+  </script>
+</body>
+
+</html>

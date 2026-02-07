@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wubu | Unblocker</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    :root {
+      --bg-color: #f8fafc;
+      --card-bg: #ffffff;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --text-main: #334155;
+      --text-muted: #64748b;
+      --border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Nav */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      background: white;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 25px;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent);
+    }
+
+    /* Hero */
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .hero h1 {
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 15px;
+      line-height: 1.2;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 500px;
+      margin-bottom: 40px;
+    }
+
+    /* Search Bar */
+    .omnibox {
+      display: flex;
+      align-items: center;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 8px;
+      width: 100%;
+      max-width: 550px;
+      margin-bottom: 50px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s;
+    }
+
+    .omnibox:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 4px 25px rgba(99, 102, 241, 0.12);
+    }
+
+    .omnibox input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-size: 1rem;
+      padding: 12px 15px;
+      outline: none;
+    }
+
+    .omnibox input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .omnibox button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: background 0.2s;
+    }
+
+    .omnibox button:hover {
+      background: var(--accent-hover);
+    }
+
+    /* Quick Links */
+    .quick-links {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .link-card {
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 25px;
+      width: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      text-decoration: none;
+      color: var(--text-muted);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+    }
+
+    .link-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+      border-color: var(--accent);
+      color: var(--text-main);
+    }
+
+    .link-card i {
+      font-size: 1.6rem;
+    }
+
+    .link-card span {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border-color);
+      background: white;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    @media (max-width: 600px) {
+      nav {
+        padding: 15px 20px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero h1 {
+        font-size: 2.2rem;
+      }
+
+      .hero p {
+        font-size: 1rem;
+      }
+
+      .quick-links {
+        gap: 12px;
+      }
+
+      .link-card {
+        width: 90px;
+        padding: 18px;
+      }
+    }
+  </style>
+
+  <!-- Scripts -->
+  <script src="/assets/js/dashboard.js" defer></script>
+</head>
+
+<body>
+
+  <nav>
+    <a href="/" class="brand">
+      <i class="fas fa-ghost"></i>
+      Wubu
+    </a>
+    <div class="nav-links">
+      <a href="/stuff">Browse</a>
+      <a href="/blooket">Blooket</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <h1>Explore <span>Freely</span></h1>
+    <p>Access websites, games, and apps without restrictions</p>
+
+    <div class="omnibox">
+      <input type="text" id="proxyInput" placeholder="Search the web..." autofocus>
+      <button id="goBtn"><i class="fas fa-search"></i></button>
+    </div>
+
+    <div class="quick-links">
+      <a href="#" class="link-card" onclick="quickLink('https://youtube.com')">
+        <i class="fab fa-youtube" style="color: #ef4444;"></i>
+        <span>YouTube</span>
+      </a>
+      <a href="#" class="link-card" onclick="quickLink('https://discord.com')">
+        <i class="fab fa-discord" style="color: #5865f2;"></i>
+        <span>Discord</span>
+      </a>
+      <a href="#" class="link-card" onclick="quickLink('https://tiktok.com')">
+        <i class="fab fa-tiktok" style="color: #334155;"></i>
+        <span>TikTok</span>
+      </a>
+      <a href="#" class="link-card" onclick="quickLink('https://reddit.com')">
+        <i class="fab fa-reddit" style="color: #f97316;"></i>
+        <span>Reddit</span>
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    Wubu &copy; 2026 &bull; <a href="/stuff">Browse All</a>
+  </footer>
+
+</body>
+
+</html>

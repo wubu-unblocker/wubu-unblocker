@@ -1,0 +1,57 @@
+<!-- Wubu Navigation -->
+<nav class="nav">
+  <a href="{{route}}{{/}}" class="nav-brand">
+    <i class="fas fa-ghost"></i>
+    <span>{{mask}}{{Wubu}}</span>
+  </a>
+  <div class="nav-links">
+    <a href="{{route}}{{/games}}" class="{{#activeNav games}}active{{/activeNav}}">{{mask}}{{Games}}</a>
+    <a href="{{route}}{{/browsing}}" class="{{#activeNav browsing}}active{{/activeNav}}">{{mask}}{{Proxies}}</a>
+    <a href="{{route}}{{/blooket}}">{{mask}}{{Blooket}}</a>
+    <a href="{{route}}{{/docs}}" class="{{#activeNav docs}}active{{/activeNav}}">{{mask}}{{Docs}}</a>
+    <a href="{{route}}{{/issues}}" class="{{#activeNav issues}}active{{/activeNav}}">{{mask}}{{Issues}}</a>
+  </div>
+  <div class="nav-actions">
+    <button class="nav-icon" id="settingsBtn" title="Settings">
+      <i class="fas fa-cog"></i>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Navigation -->
+<input id="mnavecb" type="checkbox" aria-hidden="true" />
+<label for="mnavecb" class="mnave" aria-label="Toggle navigation menu">
+  <span class="mnavebutton" aria-hidden="true"></span>
+</label>
+
+<div class="mobile-overlay">
+  <ul class="navbar-1">
+    <li><a href="{{route}}{{/games}}">Games</a></li>
+    <li><a href="{{route}}{{/browsing}}">Proxies</a></li>
+    <li><a href="{{route}}{{/blooket}}">Blooket</a></li>
+    <li><a href="{{route}}{{/docs}}">Docs</a></li>
+    <li><a href="{{route}}{{/issues}}">Issues</a></li>
+  </ul>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Settings</h3>
+      <button class="modal-close"
+        onclick="document.getElementById('settingsModal').classList.remove('active')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="csel">
+        <!--SETTINGS-->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('settingsBtn')?.addEventListener('click', () => {
+    document.getElementById('settingsModal').classList.toggle('active');
+  });
+</script>

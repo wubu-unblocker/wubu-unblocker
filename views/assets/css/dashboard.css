@@ -1,0 +1,237 @@
+:root {
+    --bg-color: #0f172a;
+    /* Slate 900 */
+    --sidebar-bg: #1e293b;
+    /* Slate 800 */
+    --border-color: #334155;
+    /* Slate 700 */
+
+    /* Strictly Blue & Grey */
+    --accent: #2563eb;
+    /* Blue 600 */
+    --accent-hover: #1d4ed8;
+    /* Blue 700 */
+
+    --text-main: #f8fafc;
+    /* Slate 50 */
+    --text-muted: #94a3b8;
+    /* Slate 400 */
+
+    --sidewidth: 250px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Inter', -apple-system, sans-serif;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: var(--sidewidth);
+    min-width: var(--sidewidth);
+    background-color: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+.logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+    text-decoration: none;
+}
+
+.logo span {
+    color: var(--accent);
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 15px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.1s;
+}
+
+.nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.nav-item.active {
+    background-color: var(--accent);
+    color: white;
+}
+
+.footer {
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+}
+
+/* Content */
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 20px;
+}
+
+.center-box {
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+}
+
+h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 30px;
+    color: white;
+}
+
+/* Search Bar */
+.omnibox {
+    display: flex;
+    align-items: center;
+    background: #1e293b;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 40px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.omnibox:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+.omnibox input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 1rem;
+    padding: 10px;
+    outline: none;
+}
+
+.omnibox button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    font-size: 1.1rem;
+}
+
+.omnibox button:hover {
+    background-color: var(--accent-hover);
+}
+
+/* Icons */
+.quick-links {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.link-card {
+    background: #1e293b;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    width: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: 0.2s;
+    text-decoration: none;
+    color: var(--text-muted);
+}
+
+.link-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--accent);
+    color: white;
+}
+
+.link-card i {
+    font-size: 1.5rem;
+}
+
+/* Switch */
+.switch-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.toggle {
+    width: 40px;
+    height: 22px;
+    background: #334155;
+    border-radius: 50px;
+    position: relative;
+    cursor: pointer;
+}
+
+.toggle.active {
+    background: var(--accent);
+}
+
+.knob {
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: 0.2s;
+}
+
+.toggle.active .knob {
+    left: 20px;
+}
+
+.panic {
+    position: absolute;
+    bottom: 20px;
+    color: #475569;
+    font-size: 0.8rem;
+}

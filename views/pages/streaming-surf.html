@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wubu | Proxies</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Reuse existing styles -->
+    <link rel="stylesheet" href="/assets/css/wubu.css">
+
+    <style>
+        /* Additional Styles for Browser Mode */
+        .hidden {
+            display: none !important;
+        }
+
+        #browserScreen {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 70px);
+            /* Adjust for Nav */
+            background-color: #f8fafc;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            background: white;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            gap: 12px;
+        }
+
+        .action-btn {
+            background: #f8fafc;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            color: #334155;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 500;
+        }
+
+        .action-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .url-bar {
+            flex: 1;
+            display: flex;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 6px 12px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .url-bar input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-family: 'Outfit', sans-serif;
+            color: #334155;
+        }
+
+        .stream-container {
+            flex: 1;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            outline: none;
+        }
+
+        #stream {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .status-overlay {
+            position: absolute;
+            background: white;
+            padding: 30px 50px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Ensure nav stays on top */
+        nav {
+            position: relative;
+            z-index: 200;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="/" class="nav-brand">
+            <i class="fas fa-ghost"></i>
+            <span>Wubu</span>
+        </a>
+        <div class="nav-links">
+            <a href="/browsing" class="active">Proxies</a>
+            <a href="/games">Games</a>
+            <a href="/apps">Apps</a>
+            <a href="/blooket">Blooket</a>
+        </div>
+        <div class="nav-actions">
+            <!-- Settings button removed for simplicity in this mode -->
+        </div>
+    </nav>
+
+    <!-- START SCREEN -->
+    <main id="startScreen" class="container">
+        <h1 class="page-title">Web Proxies</h1>
+        <p class="page-subtitle">
+            Secure Remote Browser Streaming
+        </p>
+
+        <!-- Search Section -->
+        <div class="proxy-section">
+            <div class="search-box" style="max-width: 600px; margin: 0 auto 32px">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="startInput" placeholder="Enter URL or search..." autocomplete="off" autofocus />
+                <button class="search-btn" onclick="startBrowse()">Browse</button>
+            </div>
+
+            <p style="color: var(--text-secondary); margin-bottom: 24px">
+                Popular Sites:
+            </p>
+
+            <!-- Preset Cards -->
+            <div class="cards-grid">
+                <div class="card" onclick="quickBrowse('https://youtube.com')">
+                    <div class="card-icon"><i class="fab fa-youtube"></i></div>
+                    <h3>YouTube</h3>
+                </div>
+                <div class="card" onclick="quickBrowse('https://discord.com')">
+                    <div class="card-icon"><i class="fab fa-discord"></i></div>
+                    <h3>Discord</h3>
+                </div>
+                <div class="card" onclick="quickBrowse('https://google.com')">
+                    <div class="card-icon"><i class="fab fa-google"></i></div>
+                    <h3>Google</h3>
+                </div>
+                <div class="card" onclick="quickBrowse('https://tiktok.com')">
+                    <div class="card-icon"><i class="fab fa-tiktok"></i></div>
+                    <h3>TikTok</h3>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- BROWSER SCREEN -->
+    <div id="browserScreen" class="hidden">
+        <div class="toolbar">
+            <button class="action-btn" onclick="exitBrowse()"><i class="fas fa-arrow-left"></i> End Session</button>
+            <div class="url-bar">
+                <input type="text" id="browserInput" placeholder="Enter URL...">
+            </div>
+            <button class="action-btn" onclick="navigateBrowser()"><i class="fas fa-play"></i></button>
+            <button class="action-btn" onclick="toggleFullscreen()"><i class="fas fa-expand"></i></button>
+        </div>
+
+        <div class="stream-container" id="streamContainer" tabindex="0">
+            <div class="status-overlay" id="status">
+                <h3>Connecting...</h3>
+                <p>Initializing remote browser session...</p>
+            </div>
+            <img id="stream" src="" draggable="false">
+        </div>
+    </div>
+
+    <script>
+        // --- UI Logic ---
+        const startScreen = document.getElementById('startScreen');
+        const browserScreen = document.getElementById('browserScreen');
+        const startInput = document.getElementById('startInput');
+
+        // Browser Elements
+        const stream = document.getElementById('stream');
+        const streamContainer = document.getElementById('streamContainer');
+        const status = document.getElementById('status');
+        const browserInput = document.getElementById('browserInput');
+
+        let ws = null;
+        let isConnected = false;
+
+        function startBrowse() {
+            const val = startInput.value.trim();
+            if (!val) return;
+            activateBrowser(val);
+        }
+
+        function quickBrowse(url) {
+            activateBrowser(url);
+        }
+
+        function exitBrowse() {
+            browserScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            // Optional: Close WS to save resources?
+            // For now, keep it open for speed, or close it.
+            // If we close, we need to reconnect next time.
+            if (ws) ws.close();
+            ws = null;
+            isConnected = false;
+        }
+
+        function activateBrowser(initialUrl) {
+            startScreen.classList.add('hidden');
+            browserScreen.classList.remove('hidden');
+
+            // Format URL
+            let url = initialUrl;
+            if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+                // Basic heuristic: if it looks like a domain, add https, else search
+                if (url.includes('.') && !url.includes(' ')) {
+                    url = 'https://' + url;
+                } else {
+                    url = 'https://google.com/search?q=' + encodeURIComponent(url);
+                }
+            }
+            browserInput.value = url;
+
+            if (!isConnected) {
+                // Connect WS first
+                connect(() => {
+                    // Navigate after connection
+                    send({ type: 'navigate', url: url });
+                });
+            } else {
+                send({ type: 'navigate', url: url });
+            }
+        }
+
+        function navigateBrowser() {
+            const url = browserInput.value;
+            activateBrowser(url); // re-use logic
+        }
+
+        // --- Stream Logic (Ported from V1/Blooket) ---
+        function connect(startCallback) {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // Note: Same endpoint as Blooket service
+            ws = new WebSocket(`${protocol}//${location.host}/blooket-ws`);
+
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'frame') {
+                    stream.src = 'data:image/jpeg;base64,' + msg.data;
+                    status.classList.add('hidden');
+                } else if (msg.type === 'ready') {
+                    status.classList.add('hidden');
+                    isConnected = true;
+                    if (startCallback) startCallback();
+                } else if (msg.type === 'error') {
+                    status.innerHTML = `<h3>Error</h3><p>${msg.message}</p>`;
+                    status.classList.remove('hidden');
+                }
+            };
+            ws.onclose = () => {
+                isConnected = false;
+                // Only show reconnect if we are in browser mode
+                if (!browserScreen.classList.contains('hidden')) {
+                    status.innerHTML = '<h3>Disconnected</h3><p>Reconnecting...</p>';
+                    status.classList.remove('hidden');
+                    setTimeout(() => connect(startCallback), 2000);
+                }
+            };
+            ws.onopen = () => {
+                // Connection open
+            };
+        }
+
+        function send(data) { if (ws && ws.readyState == 1) ws.send(JSON.stringify(data)); }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) streamContainer.requestFullscreen();
+            else document.exitFullscreen();
+        }
+
+        // Input Mappings
+        function getkCoords(e) {
+            const rect = stream.getBoundingClientRect();
+            // Server viewport hardcoded in blooket-service
+            const naturalWidth = 1920;
+            const naturalHeight = 1080;
+
+            const elementWidth = rect.width;
+            const elementHeight = rect.height;
+
+            const imageRatio = naturalWidth / naturalHeight;
+            const elementRatio = elementWidth / elementHeight;
+
+            let displayedWidth, displayedHeight, offsetX, offsetY;
+
+            if (elementRatio > imageRatio) {
+                displayedHeight = elementHeight;
+                displayedWidth = elementHeight * imageRatio;
+                offsetX = (elementWidth - displayedWidth) / 2;
+                offsetY = 0;
+            } else {
+                displayedWidth = elementWidth;
+                displayedHeight = elementWidth / imageRatio;
+                offsetX = 0;
+                offsetY = (elementHeight - displayedHeight) / 2;
+            }
+
+            const clickX = e.clientX - rect.left - offsetX;
+            const clickY = e.clientY - rect.top - offsetY;
+
+            const finalX = (clickX / displayedWidth) * naturalWidth;
+            const finalY = (clickY / displayedHeight) * naturalHeight;
+
+            return { x: Math.round(finalX), y: Math.round(finalY) };
+        }
+
+        // Event Listeners
+        startInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') startBrowse();
+        });
+        browserInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') navigateBrowser();
+        });
+
+        streamContainer.addEventListener('mousedown', e => {
+            const coords = getkCoords(e);
+            send({ type: 'mousedown', x: coords.x, y: coords.y, button: e.button == 2 ? 'right' : 'left' });
+        });
+        streamContainer.addEventListener('mouseup', e => {
+            const coords = getkCoords(e);
+            send({ type: 'mouseup', x: coords.x, y: coords.y, button: e.button == 2 ? 'right' : 'left' });
+        });
+        streamContainer.addEventListener('mousemove', e => {
+            const coords = getkCoords(e);
+            send({ type: 'mousemove', x: coords.x, y: coords.y });
+        });
+        document.addEventListener('keydown', e => {
+            // Don't capture keys if typing in URL bar
+            if (document.activeElement === browserInput || document.activeElement === startInput) return;
+
+            const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Backspace', 'Enter'];
+            // Prevent scrolling
+            if (keys.includes(e.key)) e.preventDefault();
+
+            send({ type: 'keydown', key: e.key, keyCode: e.keyCode });
+        });
+
+    </script>
+</body>
+
+</html>

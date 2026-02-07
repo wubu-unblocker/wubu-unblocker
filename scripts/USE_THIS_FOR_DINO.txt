@@ -1,0 +1,18 @@
+DINO CHEAT ACTIVATION INSTRUCTIONS:
+
+Since the Dino game file location is dynamic or hidden, use this method to activate cheats:
+
+1. Open the Dino Game (chrome://dino or on the site).
+2. Open Developer Console (F12 -> Console).
+3. Paste the following code and hit Enter:
+
+(function(){var s=document.createElement('script');s.src='/scripts/dino-cheats.js';document.body.appendChild(s);})();
+
+Alternatively, create a bookmark with this URL:
+javascript:(function(){var s=document.createElement('script');s.src='/scripts/dino-cheats.js';document.body.appendChild(s);})();
+
+Controls:
+- Ctrl+E: Toggle Menu
+- Invincibility: God Mode
+- Auto Jump: AI bot
+- Speed: Adjust game speed

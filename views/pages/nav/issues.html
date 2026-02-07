@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>{{mask}}{{Wubu | Issues}}</title>
+    <!--HEAD-CONTENT-->
+    <style>
+      .issues-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+
+      .panel {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        box-shadow: var(--shadow);
+      }
+
+      .panel h2 {
+        font-size: 1.05rem;
+        margin-bottom: 10px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .field label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .field input[type="text"],
+      .field textarea {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg);
+        padding: 12px 12px;
+        font-family: inherit;
+        font-size: 0.95rem;
+        color: var(--text);
+        outline: none;
+      }
+
+      .field textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .actions-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-weight: 700;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .muted {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
+      .issues-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .issue-item {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        cursor: pointer;
+      }
+
+      .issue-item:hover {
+        border-color: var(--accent);
+      }
+
+      .score-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 8px 6px;
+      }
+
+      .vote-btn {
+        width: 34px;
+        height: 30px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .vote-btn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .score {
+        font-weight: 800;
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+
+      .issue-title {
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+
+      .issue-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+      }
+
+      .thumbs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .thumbs img {
+        width: 90px;
+        height: 56px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+      }
+
+      .detail {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+
+      .detail h3 {
+        font-size: 1rem;
+        margin-bottom: 8px;
+      }
+
+      .comments {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .comment {
+        border: 1px solid var(--border);
+        background: var(--bg);
+        border-radius: 14px;
+        padding: 12px;
+      }
+
+      .comment .when {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        margin-top: 6px;
+      }
+
+      .reply-box {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border);
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 900px) {
+        .issues-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!--ANTI-EXFIL-->
+    <div id="header">
+      <!--HEADER-->
+    </div>
+
+    <main class="container">
+      <h1 class="page-title">Issues</h1>
+      <p class="page-subtitle">
+        Post problems you encounter. No account required.
+      </p>
+
+      <div class="issues-layout">
+        <section class="panel">
+          <h2>Create Issue</h2>
+          <div class="field">
+            <label for="issue-title">Title</label>
+            <input id="issue-title" type="text" maxlength="120" placeholder="Short summary" />
+          </div>
+          <div class="field">
+            <label for="issue-body">Details</label>
+            <textarea id="issue-body" maxlength="6000" placeholder="What happened, what you expected, and steps to reproduce"></textarea>
+          </div>
+          <div class="field">
+            <label for="issue-images">Attach images (optional)</label>
+            <input id="issue-images" type="file" accept="image/*" multiple />
+            <div class="muted">Images are uploaded to Firebase Storage.</div>
+          </div>
+          <div class="actions-row">
+            <button class="btn primary" id="submit-issue">Post Issue</button>
+            <div class="muted" id="submit-status"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+            <h2 style="margin: 0;">Top Issues</h2>
+            <button class="btn" id="refresh">Refresh</button>
+          </div>
+          <div class="issues-list" id="issues-list"></div>
+
+          <div class="detail" id="detail" style="display:none;"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="footer">
+      <!--FOOTER-->
+    </div>
+
+    <script>
+      const apiBase = '{{route}}{{/api/issues}}';
+
+      function getVisitorId() {
+        const key = 'wubu_issues_visitor';
+        let id = localStorage.getItem(key);
+        if (!id) {
+          id = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now();
+          localStorage.setItem(key, id);
+        }
+        return id;
+      }
+
+      async function apiFetch(path, opts = {}) {
+        const headers = Object.assign({}, opts.headers || {}, {
+          'x-visitor-id': getVisitorId(),
+        });
+        return fetch(path, Object.assign({}, opts, { headers }));
+      }
+
+      function fmtTime(ms) {
+        try { return new Date(ms).toLocaleString(); } catch { return ''; }
+      }
+
+      function escapeHtml(s) {
+        return (s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+
+      async function uploadImages(files) {
+        if (!files || !files.length) return [];
+        const fd = new FormData();
+        for (const f of files) fd.append('files', f, f.name);
+        const res = await apiFetch(apiBase + '/upload', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('Upload failed: ' + res.status);
+        const json = await res.json();
+        return json.urls || [];
+      }
+
+      async function createIssue() {
+        const title = document.getElementById('issue-title').value.trim();
+        const body = document.getElementById('issue-body').value.trim();
+        const files = document.getElementById('issue-images').files;
+        const status = document.getElementById('submit-status');
+        const btn = document.getElementById('submit-issue');
+
+        if (!title || !body) {
+          status.textContent = 'Title and details are required.';
+          return;
+        }
+
+        btn.disabled = true;
+        status.textContent = 'Uploading...';
+        try {
+          const urls = await uploadImages(files);
+          status.textContent = 'Posting...';
+          const res = await apiFetch(apiBase, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ title, body, imageUrls: urls }),
+          });
+          if (!res.ok) throw new Error('Create failed: ' + res.status);
+          document.getElementById('issue-title').value = '';
+          document.getElementById('issue-body').value = '';
+          document.getElementById('issue-images').value = '';
+          status.textContent = 'Posted.';
+          await refreshIssues();
+        } catch (e) {
+          console.error(e);
+          status.textContent = e.message || String(e);
+        } finally {
+          btn.disabled = false;
+          setTimeout(() => { status.textContent = ''; }, 2500);
+        }
+      }
+
+      function renderIssueItem(issue) {
+        const div = document.createElement('div');
+        div.className = 'issue-item';
+
+        const score = (issue.score || 0);
+        const comments = (issue.commentCount || 0);
+        const updatedAt = issue.updatedAt || issue.createdAt || 0;
+
+        div.innerHTML = `
+          <div class="score-box">
+            <button class="vote-btn up" title="Like"><i class="fas fa-thumbs-up"></i></button>
+            <div class="score">${score}</div>
+            <button class="vote-btn down" title="Dislike"><i class="fas fa-thumbs-down"></i></button>
+          </div>
+          <div>
+            <div class="issue-title">${escapeHtml(issue.title || 'Untitled')}</div>
+            <div class="issue-meta">
+              <span>${comments} repl${comments === 1 ? 'y' : 'ies'}</span>
+              <span>Updated: ${escapeHtml(fmtTime(updatedAt))}</span>
+            </div>
+          </div>
+        `;
+
+        const up = div.querySelector('.up');
+        const down = div.querySelector('.down');
+
+        up.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await react(issue.id, 1);
+        });
+        down.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await react(issue.id, -1);
+        });
+
+        div.addEventListener('click', () => openDetail(issue.id));
+        return div;
+      }
+
+      async function refreshIssues() {
+        const list = document.getElementById('issues-list');
+        list.innerHTML = '<div class="muted">Loading...</div>';
+        document.getElementById('detail').style.display = 'none';
+        try {
+          const res = await apiFetch(apiBase);
+          if (!res.ok) throw new Error('Load failed: ' + res.status);
+          const data = await res.json();
+          list.innerHTML = '';
+          for (const issue of (data.issues || [])) {
+            list.appendChild(renderIssueItem(issue));
+          }
+          if (!(data.issues || []).length) {
+            list.innerHTML = '<div class="muted">No issues yet.</div>';
+          }
+        } catch (e) {
+          console.error(e);
+          list.innerHTML = '<div class="muted">Failed to load issues.</div>';
+        }
+      }
+
+      async function react(issueId, value) {
+        try {
+          const res = await apiFetch(`${apiBase}/${encodeURIComponent(issueId)}/reaction`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ value }),
+          });
+          if (!res.ok) throw new Error('Reaction failed: ' + res.status);
+          await refreshIssues();
+          const detail = document.getElementById('detail');
+          if (detail.dataset.issueId === issueId) {
+            await openDetail(issueId);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      function renderThumbs(urls) {
+        if (!urls || !urls.length) return '';
+        return `<div class="thumbs">${urls.map(u => `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="attachment"></a>`).join('')}</div>`;
+      }
+
+      async function openDetail(issueId) {
+        const detail = document.getElementById('detail');
+        detail.style.display = 'block';
+        detail.dataset.issueId = issueId;
+        detail.innerHTML = '<div class="muted">Loading issue...</div>';
+        try {
+          const res = await apiFetch(`${apiBase}/${encodeURIComponent(issueId)}`);
+          if (!res.ok) throw new Error('Load failed: ' + res.status);
+          const data = await res.json();
+          const issue = data.issue;
+          const comments = data.comments || [];
+
+          detail.innerHTML = `
+            <h3>${escapeHtml(issue.title || 'Untitled')}</h3>
+            <div class="muted">Score: ${issue.score || 0} | ${comments.length} repl${comments.length === 1 ? 'y' : 'ies'} | Created: ${escapeHtml(fmtTime(issue.createdAt || 0))}</div>
+            <div style="margin-top:10px; white-space:pre-wrap;">${escapeHtml(issue.body || '')}</div>
+            ${renderThumbs(issue.imageUrls || [])}
+            <div class="reply-box">
+              <div class="field">
+                <label for="reply-body">Reply</label>
+                <textarea id="reply-body" maxlength="6000" placeholder="Add more info, or respond to someone"></textarea>
+              </div>
+              <div class="field">
+                <label for="reply-images">Attach images (optional)</label>
+                <input id="reply-images" type="file" accept="image/*" multiple />
+              </div>
+              <div class="row">
+                <button class="btn primary" id="post-reply">Post Reply</button>
+                <div class="muted" id="reply-status"></div>
+              </div>
+            </div>
+            <div class="comments" id="comments"></div>
+          `;
+
+          const commentsEl = detail.querySelector('#comments');
+          for (const c of comments) {
+            const cEl = document.createElement('div');
+            cEl.className = 'comment';
+            cEl.innerHTML = `
+              <div style="white-space:pre-wrap;">${escapeHtml(c.body || '')}</div>
+              ${renderThumbs(c.imageUrls || [])}
+              <div class="when">${escapeHtml(fmtTime(c.createdAt || 0))}</div>
+            `;
+            commentsEl.appendChild(cEl);
+          }
+          if (!comments.length) {
+            commentsEl.innerHTML = '<div class="muted">No replies yet.</div>';
+          }
+
+          detail.querySelector('#post-reply').addEventListener('click', async () => {
+            const body = detail.querySelector('#reply-body').value.trim();
+            const status = detail.querySelector('#reply-status');
+            const btn = detail.querySelector('#post-reply');
+            if (!body) {
+              status.textContent = 'Reply text is required.';
+              return;
+            }
+            btn.disabled = true;
+            status.textContent = 'Uploading...';
+            try {
+              const urls = await uploadImages(detail.querySelector('#reply-images').files);
+              status.textContent = 'Posting...';
+              const r = await apiFetch(`${apiBase}/${encodeURIComponent(issueId)}/comments`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ body, imageUrls: urls }),
+              });
+              if (!r.ok) throw new Error('Reply failed: ' + r.status);
+              status.textContent = 'Posted.';
+              await openDetail(issueId);
+              await refreshIssues();
+            } catch (e) {
+              console.error(e);
+              status.textContent = e.message || String(e);
+            } finally {
+              btn.disabled = false;
+              setTimeout(() => { status.textContent = ''; }, 2500);
+            }
+          });
+        } catch (e) {
+          console.error(e);
+          detail.innerHTML = '<div class="muted">Failed to load issue.</div>';
+        }
+      }
+
+      document.getElementById('submit-issue').addEventListener('click', createIssue);
+      document.getElementById('refresh').addEventListener('click', refreshIssues);
+      refreshIssues();
+    </script>
+  </body>
+</html>
+
