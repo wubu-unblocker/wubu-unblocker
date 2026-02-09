@@ -35,14 +35,19 @@ const wispUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + locati
 // Public fallback Wisp server in case local one has network restrictions
 const publicWispUrl = 'wss://wisp.mercurywork.shop/';
 
+// Transport keys are historically inconsistent across UIs:
+// - Some pages store 'unix'/'epoch' (SEO/aliased prefixes)
+// - Some store 'libcurl'/'epoxy' (canonical names)
+// Support both so the user's selection actually applies.
 const transports = {
-  'epoxy': '{{route}}{{/epoxy/index.mjs}}',
-  'libcurl': '{{route}}{{/libcurl/index.mjs}}',
+  epoxy: '{{route}}{{/epoxy/index.mjs}}',
+  libcurl: '{{route}}{{/libcurl/index.mjs}}',
+  epoch: '{{route}}{{/epoxy/index.mjs}}',
+  unix: '{{route}}{{/libcurl/index.mjs}}',
 };
 
-// Share the same settings storage bucket as the settings UI (csel.js),
-// otherwise user-selected transports/PublicWisp never apply.
-const storageId = '{{hu-lts}}-storage';
+// Share the same settings storage bucket as the settings UI (csel.js) and the dist build.
+const storageId = 'net-time-storage';
 const getStorage = () => {
   try {
     return JSON.parse(localStorage.getItem(storageId)) || {};
@@ -52,8 +57,8 @@ const getStorage = () => {
 };
 const readStorage = (name) => getStorage()[name];
 
-// Default to libcurl (more compatible with strict TLS/CDN targets like YouTube/Discord).
-const defaultTransport = 'libcurl';
+// Default to Epoxy for Chromium/WebKit (faster), and libcurl for Firefox (compat).
+const defaultTransport = /firefox/i.test(navigator.userAgent) ? 'unix' : 'epoch';
 
 let bareMuxConnection = null;
 
@@ -108,7 +113,10 @@ async function initializeBareMux() {
     usedWispUrl = swAllowedHostnames.includes(location.hostname) ? wispUrl : publicWispUrl;
   }
 
-  const transportMode = transports[readStorage('Transport')] || transports[defaultTransport];
+  const transportMode =
+    transports[readStorage('Transport')] ||
+    transports[defaultTransport] ||
+    transports['unix'];
   const transportOptions = { wisp: usedWispUrl };
 
   console.log('Transport mode:', transportMode);

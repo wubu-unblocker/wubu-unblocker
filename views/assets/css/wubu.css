@@ -353,7 +353,9 @@ body {
     background: var(--bg-secondary);
     border-radius: var(--radius-lg);
     width: 100%;
-    max-width: 400px;
+    max-width: 560px;
+    max-height: calc(100vh - 80px);
+    overflow: hidden;
     box-shadow: var(--shadow-lg);
     transform: translateY(20px);
     transition: transform .2s
@@ -394,7 +396,61 @@ body {
 }
 
 .modal-body {
-    padding: 24px
+    padding: 24px;
+    overflow: auto;
+    max-height: calc(100vh - 160px)
+}
+
+/* Settings modal: make legacy HU settings markup match Wubu styling */
+.modal #csel,
+.modal .settings-content {
+    color: var(--text);
+    gap: 14px
+}
+
+.modal .cseltitle {
+    color: var(--text);
+    font-weight: 800;
+    margin: 12px 0 8px
+}
+
+.modal .cloakform input[type=text],
+.modal #csel input[type=text],
+.modal #csel select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px
+}
+
+.modal .cloakform input[type=submit],
+.modal .cloakform input[type=button],
+.modal #csel input[type=submit],
+.modal #csel input[type=button] {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: #fff;
+    border-radius: 10px;
+    cursor: pointer
+}
+
+.modal .cloakform input[type=button] {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text)
+}
+
+.modal .cloakform input[type=button]:hover {
+    border-color: var(--accent);
+    color: var(--accent)
+}
+
+.modal details > summary {
+    list-style: none
+}
+
+.modal details > summary::-webkit-details-marker {
+    display: none
 }
 
 .setting-item {

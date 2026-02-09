@@ -13,6 +13,11 @@
   date.setFullYear(date.getFullYear() + 100);
   date = date.toUTCString();
 
+  const defaultTitle = document.title || 'Wubu';
+  const defaultIconHref =
+    document.querySelector("link[rel*='icon']")?.href ||
+    '{{route}}{{assets/ico/favicon.ico}}';
+
   // Cookies will not be used unless necessary. The localStorage API will be used instead.
   const storageId = '{{hu-lts}}-storage',
     storageObject = () => JSON.parse(localStorage.getItem(storageId)) || {},
@@ -137,6 +142,8 @@
         'Home - Google Drive \n https://ssl.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png',
       Gmail:
         'Inbox - Gmail \n https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+      Clever:
+        'Clever | Portal \n https://assets.clever.com/launchpad/871457e7a/favicon.ico?1',
     }),
     defaultTheme = 'dark',
     // Choose the default transport mode, for proxying, based on the browser.
@@ -149,19 +156,19 @@
   /* BEGIN WEBSITE SETTINGS */
 
   if (document.getElementById('csel')) {
-    const attachEventListener = (selector, ...args) =>
-      (
-        document.getElementById(selector) || document.querySelector(selector)
-      ).addEventListener(...args),
-      focusElement = document
-        .getElementsByClassName('dropdown-settings')[0]
-        .parentElement.querySelector("a[href='#']");
+    const attachEventListener = (selector, ...args) => {
+      const el = document.getElementById(selector) || document.querySelector(selector);
+      if (!el) return null;
+      el.addEventListener(...args);
+      return el;
+    };
 
     // TODO: Add functionality to adapt listeners for the Wisp Transport List.
     // TODO: Properly comment this code.
     const attachClassEventListener = (classSelector, ...args) => {
       const eventTrigger = args[0],
         selectorList = [...document.getElementsByClassName(classSelector)];
+      if (!selectorList.length) return;
       selectorList.forEach((element, index) => {
         let otherElements = [...selectorList];
         otherElements.splice(index, 1);
@@ -184,9 +191,21 @@
       });
     };
 
+    // Optional: some themes include a separate close button inside a dropdown settings menu.
     attachEventListener('.dropdown-settings .close-settings-btn', 'click', () => {
-      document.activeElement.blur();
+      try { document.activeElement.blur(); } catch {}
     });
+
+    const applyCloak = (title, icon) => {
+      if (title) {
+        pageTitle(title);
+        setStorage('Title', title);
+      }
+      if (icon) {
+        pageIcon(icon);
+        setStorage('Icon', icon);
+      }
+    };
 
     // Allow users to set a custom title with the UI.
     attachEventListener('titleform', 'submit', (e) => {
@@ -197,10 +216,8 @@
         setStorage('Title', e.value);
         e.value = '';
       } else if (confirm('Reset the title to default?')) {
-        // Allow users to reset the title to default if nothing is entered.
-        focusElement.focus();
         removeStorage('Title');
-        pageTitle('Holy Unblocker LTS');
+        pageTitle(defaultTitle);
       }
     });
 
@@ -213,10 +230,8 @@
         setStorage('Icon', e.value);
         e.value = '';
       } else if (confirm('Reset the icon to default?')) {
-        //    Allow users to reset the favicon to default if nothing is entered.
-        focusElement.focus();
         removeStorage('Icon');
-        pageIcon('{{route}}{{assets/ico/favicon.ico}}');
+        pageIcon(defaultIconHref);
       }
     });
 
@@ -244,6 +259,23 @@
       ).split(' \n ');
     });
 
+    // One-click Clever preset (optional button).
+    attachEventListener('cloak-clever', 'click', () => {
+      applyCloak(
+        'Clever | Portal',
+        'https://assets.clever.com/launchpad/871457e7a/favicon.ico?1'
+      );
+    });
+
+    // Quick reset button (optional).
+    attachEventListener('cloak-reset', 'click', () => {
+      if (!confirm('Reset tab title and icon?')) return;
+      removeStorage('Title');
+      removeStorage('Icon');
+      pageTitle(defaultTitle);
+      pageIcon(defaultIconHref);
+    });
+
     attachClassEventListener('search-engine-list', 'change', (e) => {
       e.target.value === defaultSearch
         ? removeStorage('SearchEngine')
@@ -263,6 +295,7 @@
         let torCheck = document.getElementsByClassName('useonion');
         if (
           e.target.value !== 'libcurl' &&
+          e.target.value !== 'unix' &&
           checkBooleanState(torCheck[0]) === true
         )
           classUpdateHandler(torCheck, 'off', classEvent(torCheck, 'change'))();

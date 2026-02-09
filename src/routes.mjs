@@ -136,7 +136,8 @@ let altPaths = {
     ultraviolet: 'nt',
     wisp: 'router',
   },
-  'titaniumnetwork-documentation': 'docs',
+  // Avoid collision with the site's own /docs page.
+  'titaniumnetwork-documentation': 'tn-docs',
   codespaces: 'codesp',
   'tor-project': 'tr',
   'titaniumnetwork-discord': 'social',

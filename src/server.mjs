@@ -196,27 +196,62 @@ app.register(fastifyStatic, {
 
 let issuesFirebase;
 
+function tryParseServiceAccountJson(raw, sourceLabel) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+
+  // HF Secrets sometimes get pasted as JSON, sometimes as base64. Accept both.
+  try {
+    return JSON.parse(trimmed);
+  } catch (e1) {
+    try {
+      const decoded = Buffer.from(trimmed, 'base64').toString('utf8').trim();
+      return JSON.parse(decoded);
+    } catch (e2) {
+      const msg =
+        `Invalid Firebase credentials in ${sourceLabel}. ` +
+        `Provide FIREBASE_SERVICE_ACCOUNT_JSON as raw JSON, or FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 as base64(JSON).`;
+      const err = new Error(msg);
+      err.cause = e2;
+      throw err;
+    }
+  }
+}
+
 function initIssuesFirebase() {
   if (issuesFirebase) return issuesFirebase;
 
   let serviceAccount;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const rawB64 = process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64;
   const path = process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
     join(process.cwd(), 'wubu-issues-firebase-adminsdk-fbsvc-ce52cdd6d1.json');
 
   if (raw) {
-    serviceAccount = JSON.parse(raw);
+    serviceAccount = tryParseServiceAccountJson(raw, 'FIREBASE_SERVICE_ACCOUNT_JSON');
+  } else if (rawB64) {
+    serviceAccount = tryParseServiceAccountJson(rawB64, 'FIREBASE_SERVICE_ACCOUNT_JSON_BASE64');
   } else if (existsSync(path)) {
-    serviceAccount = JSON.parse(readFileSync(path, 'utf8'));
+    serviceAccount = tryParseServiceAccountJson(readFileSync(path, 'utf8'), `FIREBASE_SERVICE_ACCOUNT_PATH (${path})`);
   } else {
     throw new Error(
-      'Firebase credentials missing. Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH.'
+      'Firebase credentials missing. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) in HuggingFace Space Secrets.'
     );
   }
 
-  const projectId = serviceAccount.project_id;
-  const bucketName =
-    process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`;
+  const projectId = String(serviceAccount?.project_id || '').trim();
+  if (!projectId) {
+    throw new Error(
+      'Firebase credentials are missing project_id. Re-download the service account JSON from Firebase/Google Cloud.'
+    );
+  }
+
+  // Default bucket naming varies across Firebase projects; allow override.
+  // Most projects use "<projectId>.appspot.com". Some newer projects use "<projectId>.firebasestorage.app".
+  const bucketName = String(
+    process.env.FIREBASE_STORAGE_BUCKET ||
+      `${projectId}.appspot.com`
+  ).trim();
 
   if (!admin.apps.length) {
     admin.initializeApp({
@@ -225,10 +260,18 @@ function initIssuesFirebase() {
     });
   }
 
+  // Be explicit about runtime behavior and avoid weird undefined merges.
+  try {
+    admin.firestore().settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // settings() can only be called once; ignore if already configured.
+  }
+
   issuesFirebase = Object.freeze({
     db: admin.firestore(),
     bucket: admin.storage().bucket(bucketName),
     bucketName,
+    projectId,
   });
 
   return issuesFirebase;
@@ -257,14 +300,38 @@ app.get(serverUrl.pathname + 'api/issues', async (req, reply) => {
 
   const limit = Math.min(Number(req.query?.limit || 30) || 30, 50);
 
-  const snap = await fb.db
-    .collection('issues')
-    .orderBy('rank', 'desc')
-    .limit(limit)
-    .get();
+  let snap;
+  try {
+    snap = await fb.db
+      .collection('issues')
+      .orderBy('rank', 'desc')
+      .limit(limit)
+      .get();
+  } catch (e) {
+    console.error('[api/issues] Firestore query failed:', e);
+    return reply.code(500).send({
+      error:
+        'Firestore query failed. Ensure Firestore is enabled for this Firebase project and the service account has access.',
+      detail: String(e.message || e),
+    });
+  }
 
   const issues = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   return reply.send({ issues });
+});
+
+// Debug endpoint to quickly verify Firebase init on HF.
+app.get(serverUrl.pathname + 'api/issues/health', async (req, reply) => {
+  try {
+    const fb = initIssuesFirebase();
+    return reply.send({
+      ok: true,
+      projectId: fb.projectId,
+      bucketName: fb.bucketName,
+    });
+  } catch (e) {
+    return reply.code(503).send({ ok: false, error: String(e.message || e) });
+  }
 });
 
 app.post(serverUrl.pathname + 'api/issues', async (req, reply) => {
@@ -303,8 +370,17 @@ app.post(serverUrl.pathname + 'api/issues', async (req, reply) => {
     rank: rankFor(0, now),
   };
 
-  const ref = await fb.db.collection('issues').add(doc);
-  return reply.send({ id: ref.id });
+  try {
+    const ref = await fb.db.collection('issues').add(doc);
+    return reply.send({ id: ref.id });
+  } catch (e) {
+    console.error('[api/issues POST] Firestore add failed:', e);
+    return reply.code(500).send({
+      error:
+        'Failed to create issue in Firestore. Ensure Firestore is enabled and the service account has permission.',
+      detail: String(e.message || e),
+    });
+  }
 });
 
 app.get(serverUrl.pathname + 'api/issues/:id', async (req, reply) => {
@@ -317,14 +393,32 @@ app.get(serverUrl.pathname + 'api/issues/:id', async (req, reply) => {
 
   const id = String(req.params.id || '').trim();
   const issueRef = fb.db.collection('issues').doc(id);
-  const issueSnap = await issueRef.get();
+  let issueSnap;
+  try {
+    issueSnap = await issueRef.get();
+  } catch (e) {
+    console.error('[api/issues/:id] Firestore get failed:', e);
+    return reply.code(500).send({
+      error: 'Failed to load issue from Firestore.',
+      detail: String(e.message || e),
+    });
+  }
   if (!issueSnap.exists) return reply.code(404).send({ error: 'Not found.' });
 
-  const commentsSnap = await issueRef
-    .collection('comments')
-    .orderBy('createdAt', 'asc')
-    .limit(300)
-    .get();
+  let commentsSnap;
+  try {
+    commentsSnap = await issueRef
+      .collection('comments')
+      .orderBy('createdAt', 'asc')
+      .limit(300)
+      .get();
+  } catch (e) {
+    console.error('[api/issues/:id] Firestore comments query failed:', e);
+    return reply.code(500).send({
+      error: 'Failed to load comments from Firestore.',
+      detail: String(e.message || e),
+    });
+  }
 
   const comments = commentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   return reply.send({ issue: { id, ...issueSnap.data() }, comments });
@@ -353,27 +447,38 @@ app.post(serverUrl.pathname + 'api/issues/:id/comments', async (req, reply) => {
   const now = Date.now();
   const issueRef = fb.db.collection('issues').doc(id);
 
-  await fb.db.runTransaction(async (tx) => {
-    const issueSnap = await tx.get(issueRef);
-    if (!issueSnap.exists) throw new Error('NOT_FOUND');
-    const issue = issueSnap.data();
+  try {
+    await fb.db.runTransaction(async (tx) => {
+      const issueSnap = await tx.get(issueRef);
+      if (!issueSnap.exists) throw new Error('NOT_FOUND');
+      const issue = issueSnap.data();
 
-    tx.set(issueRef.collection('comments').doc(), {
-      body,
-      parentId,
-      imageUrls,
-      createdAt: now,
-    });
+      tx.set(issueRef.collection('comments').doc(), {
+        body,
+        parentId,
+        imageUrls,
+        createdAt: now,
+      });
 
-    const nextCount = Number(issue.commentCount || 0) + 1;
-    const nextUpdated = now;
-    const nextScore = Number(issue.score || 0);
-    tx.update(issueRef, {
-      commentCount: nextCount,
-      updatedAt: nextUpdated,
-      rank: rankFor(nextScore, nextUpdated),
+      const nextCount = Number(issue.commentCount || 0) + 1;
+      const nextUpdated = now;
+      const nextScore = Number(issue.score || 0);
+      tx.update(issueRef, {
+        commentCount: nextCount,
+        updatedAt: nextUpdated,
+        rank: rankFor(nextScore, nextUpdated),
+      });
     });
-  });
+  } catch (e) {
+    if (String(e.message || e) === 'NOT_FOUND') {
+      return reply.code(404).send({ error: 'Not found.' });
+    }
+    console.error('[api/issues/:id/comments] Transaction failed:', e);
+    return reply.code(500).send({
+      error: 'Failed to post reply.',
+      detail: String(e.message || e),
+    });
+  }
 
   return reply.send({ ok: true });
 });
@@ -396,37 +501,51 @@ app.post(serverUrl.pathname + 'api/issues/:id/reaction', async (req, reply) => {
   const issueRef = fb.db.collection('issues').doc(id);
   const reactRef = issueRef.collection('reactions').doc(visitorId);
 
-  await fb.db.runTransaction(async (tx) => {
-    const [issueSnap, reactSnap] = await Promise.all([tx.get(issueRef), tx.get(reactRef)]);
-    if (!issueSnap.exists) throw new Error('NOT_FOUND');
+  try {
+    await fb.db.runTransaction(async (tx) => {
+      const [issueSnap, reactSnap] = await Promise.all([
+        tx.get(issueRef),
+        tx.get(reactRef),
+      ]);
+      if (!issueSnap.exists) throw new Error('NOT_FOUND');
 
-    const issue = issueSnap.data();
-    const prev = reactSnap.exists ? Number(reactSnap.data().value || 0) : 0;
-    const next = prev === incoming ? 0 : incoming;
-    const delta = next - prev;
+      const issue = issueSnap.data();
+      const prev = reactSnap.exists ? Number(reactSnap.data().value || 0) : 0;
+      const next = prev === incoming ? 0 : incoming;
+      const delta = next - prev;
 
-    const prevLikes = Number(issue.likes || 0);
-    const prevDislikes = Number(issue.dislikes || 0);
-    const prevScore = Number(issue.score || 0);
+      const prevLikes = Number(issue.likes || 0);
+      const prevDislikes = Number(issue.dislikes || 0);
+      const prevScore = Number(issue.score || 0);
 
-    const nextScore = prevScore + delta;
+      const nextScore = prevScore + delta;
 
-    const likeDelta = (prev === 1 ? -1 : 0) + (next === 1 ? 1 : 0);
-    const dislikeDelta = (prev === -1 ? -1 : 0) + (next === -1 ? 1 : 0);
+      const likeDelta = (prev === 1 ? -1 : 0) + (next === 1 ? 1 : 0);
+      const dislikeDelta = (prev === -1 ? -1 : 0) + (next === -1 ? 1 : 0);
 
-    const now = Date.now();
+      const now = Date.now();
 
-    tx.update(issueRef, {
-      likes: prevLikes + likeDelta,
-      dislikes: prevDislikes + dislikeDelta,
-      score: nextScore,
-      updatedAt: now,
-      rank: rankFor(nextScore, now),
+      tx.update(issueRef, {
+        likes: prevLikes + likeDelta,
+        dislikes: prevDislikes + dislikeDelta,
+        score: nextScore,
+        updatedAt: now,
+        rank: rankFor(nextScore, now),
+      });
+
+      if (next === 0) tx.delete(reactRef);
+      else tx.set(reactRef, { value: next, updatedAt: now }, { merge: true });
     });
-
-    if (next === 0) tx.delete(reactRef);
-    else tx.set(reactRef, { value: next, updatedAt: now }, { merge: true });
-  });
+  } catch (e) {
+    if (String(e.message || e) === 'NOT_FOUND') {
+      return reply.code(404).send({ error: 'Not found.' });
+    }
+    console.error('[api/issues/:id/reaction] Transaction failed:', e);
+    return reply.code(500).send({
+      error: 'Failed to save reaction.',
+      detail: String(e.message || e),
+    });
+  }
 
   return reply.send({ ok: true });
 });
@@ -452,15 +571,23 @@ app.post(serverUrl.pathname + 'api/issues/upload', async (req, reply) => {
     const objectPath = `issues/${Date.now()}-${token}.${ext}`;
     const file = fb.bucket.file(objectPath);
 
-    await file.save(buf, {
-      contentType: part.mimetype,
-      metadata: {
+    try {
+      await file.save(buf, {
+        contentType: part.mimetype,
         metadata: {
-          firebaseStorageDownloadTokens: token,
+          metadata: {
+            firebaseStorageDownloadTokens: token,
+          },
         },
-      },
-      resumable: false,
-    });
+        resumable: false,
+      });
+    } catch (e) {
+      // Common HF misconfig: bucket name mismatch or Storage not enabled.
+      const msg =
+        'Upload failed. Check FIREBASE_STORAGE_BUCKET (if set) and ensure Firebase Storage is enabled for this project.';
+      console.error('[issues/upload] Storage save failed:', e);
+      return reply.code(500).send({ error: msg });
+    }
 
     const url =
       `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(fb.bucketName)}` +

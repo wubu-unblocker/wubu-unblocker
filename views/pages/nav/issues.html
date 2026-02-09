@@ -295,6 +295,20 @@
         return fetch(path, Object.assign({}, opts, { headers }));
       }
 
+      async function readError(res) {
+        try {
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const j = await res.json();
+            return j.error || j.message || JSON.stringify(j);
+          }
+          const t = await res.text();
+          return t || (res.status + ' ' + res.statusText);
+        } catch {
+          return res.status + ' ' + res.statusText;
+        }
+      }
+
       function fmtTime(ms) {
         try { return new Date(ms).toLocaleString(); } catch { return ''; }
       }
@@ -308,7 +322,7 @@
         const fd = new FormData();
         for (const f of files) fd.append('files', f, f.name);
         const res = await apiFetch(apiBase + '/upload', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error('Upload failed: ' + res.status);
+        if (!res.ok) throw new Error('Upload failed: ' + (await readError(res)));
         const json = await res.json();
         return json.urls || [];
       }
@@ -320,8 +334,12 @@
         const status = document.getElementById('submit-status');
         const btn = document.getElementById('submit-issue');
 
-        if (!title || !body) {
-          status.textContent = 'Title and details are required.';
+        if (title.length < 3) {
+          status.textContent = 'Title must be at least 3 characters.';
+          return;
+        }
+        if (body.length < 3) {
+          status.textContent = 'Details must be at least 3 characters.';
           return;
         }
 
@@ -335,7 +353,7 @@
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ title, body, imageUrls: urls }),
           });
-          if (!res.ok) throw new Error('Create failed: ' + res.status);
+          if (!res.ok) throw new Error('Create failed: ' + (await readError(res)));
           document.getElementById('issue-title').value = '';
           document.getElementById('issue-body').value = '';
           document.getElementById('issue-images').value = '';
@@ -395,7 +413,7 @@
         document.getElementById('detail').style.display = 'none';
         try {
           const res = await apiFetch(apiBase);
-          if (!res.ok) throw new Error('Load failed: ' + res.status);
+          if (!res.ok) throw new Error('Load failed: ' + (await readError(res)));
           const data = await res.json();
           list.innerHTML = '';
           for (const issue of (data.issues || [])) {
@@ -417,7 +435,7 @@
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ value }),
           });
-          if (!res.ok) throw new Error('Reaction failed: ' + res.status);
+          if (!res.ok) throw new Error('Reaction failed: ' + (await readError(res)));
           await refreshIssues();
           const detail = document.getElementById('detail');
           if (detail.dataset.issueId === issueId) {
@@ -440,7 +458,7 @@
         detail.innerHTML = '<div class="muted">Loading issue...</div>';
         try {
           const res = await apiFetch(`${apiBase}/${encodeURIComponent(issueId)}`);
-          if (!res.ok) throw new Error('Load failed: ' + res.status);
+          if (!res.ok) throw new Error('Load failed: ' + (await readError(res)));
           const data = await res.json();
           const issue = data.issue;
           const comments = data.comments || [];
@@ -500,7 +518,7 @@
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ body, imageUrls: urls }),
               });
-              if (!r.ok) throw new Error('Reply failed: ' + r.status);
+              if (!r.ok) throw new Error('Reply failed: ' + (await readError(r)));
               status.textContent = 'Posted.';
               await openDetail(issueId);
               await refreshIssues();
@@ -524,4 +542,3 @@
     </script>
   </body>
 </html>
-

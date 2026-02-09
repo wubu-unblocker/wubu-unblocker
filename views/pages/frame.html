@@ -238,6 +238,7 @@
     <div class="nav-controls">
       <button class="control-btn" id="btn-home" title="Home" onclick="window.location.href='/'"><i
           class="fas fa-home"></i></button>
+      <button class="control-btn" id="btn-copy-link" title="Copy Session Link"><i class="fas fa-link"></i></button>
       <button class="control-btn" id="btn-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
     </div>
   </div>
@@ -254,6 +255,14 @@
     const newTabBtn = document.getElementById('new-tab-btn');
     const container = document.getElementById('iframes-container');
     const urlInput = document.getElementById('url-input');
+
+    // Prevent the URL bar from being overwritten while the user is typing.
+    let isEditingUrl = false;
+    function setUrlBarValue(next) {
+      if (!urlInput) return;
+      if (isEditingUrl || document.activeElement === urlInput) return;
+      urlInput.value = next || '';
+    }
 
     let sjEncoder = null;
     let sjAvailable = false;
@@ -303,6 +312,7 @@
       try {
         const href = iframe?.contentWindow?.location?.href;
         if (!href) return null;
+        if (href === 'about:blank' || href.startsWith('about:blank')) return null;
         return decodeUvServiceUrl(href) || href;
       } catch {
         return null;
@@ -381,7 +391,7 @@
           // Don't clobber the user's raw input unless we have a real navigated URL.
           tabData.rawUrl = shown;
           tabData.url = shown;
-          if (tabData.id === activeTabId) urlInput.value = shown;
+          if (tabData.id === activeTabId) setUrlBarValue(shown);
         }
         updateTabInfo(tabData);
       });
@@ -405,7 +415,7 @@
       const active = tabs.find(t => t.id === id);
       if (active) {
         // Prefer the decoded/display URL, fall back to the last raw URL we know about.
-        urlInput.value = (active.displayUrl || active.rawUrl || active.url || '').split('?')[0];
+        setUrlBarValue((active.displayUrl || active.rawUrl || active.url || '').split('?')[0]);
         updateTabInfo(active);
       }
     }
@@ -459,7 +469,7 @@
 
       // Update URL bar if active
       if (activeTabId === id) {
-        urlInput.value = processed;
+        setUrlBarValue(processed);
       }
 
       tab.iframe.src = target;
@@ -495,7 +505,7 @@
         if (shown) {
           tab.displayUrl = shown;
           tab.url = shown;
-          if (tab.id === activeTabId) urlInput.value = shown;
+          if (tab.id === activeTabId) setUrlBarValue(shown);
         }
 
         // Continual sync for URL-based fallback info
@@ -537,11 +547,29 @@
     function navigateActiveTab() {
       if (!activeTabId) return;
       const url = urlInput.value.trim();
-      if (url) navigateTab(activeTabId, url);
+      if (url) {
+        isEditingUrl = false;
+        navigateTab(activeTabId, url);
+      }
     }
 
     // Event Listeners
     newTabBtn.onclick = () => createTab();
+
+    urlInput.addEventListener('focus', () => {
+      isEditingUrl = true;
+      urlInput.select();
+    });
+    urlInput.addEventListener('blur', () => {
+      isEditingUrl = false;
+      // After the user leaves the box, resync it to the active tab.
+      const t = tabs.find(x => x.id === activeTabId);
+      if (t) setUrlBarValue((t.displayUrl || t.rawUrl || t.url || '').split('?')[0]);
+    });
+    urlInput.addEventListener('input', (e) => {
+      // Only trust real user typing; programmatic updates shouldn't lock the bar.
+      if (e && e.isTrusted) isEditingUrl = true;
+    });
 
     urlInput.onkeydown = (e) => {
       if (e.key === 'Enter') navigateActiveTab();
@@ -572,6 +600,42 @@
       if (!document.fullscreenElement) document.documentElement.requestFullscreen();
       else document.exitFullscreen();
     };
+
+    function buildSessionLinkForActiveTab() {
+      const t = tabs.find(x => x.id === activeTabId);
+      if (!t || !t.iframe || !t.iframe.src) return null;
+      try {
+        const u = new URL(t.iframe.src, location.origin);
+        const proxyPath = u.pathname + (u.search || '') + (u.hash || '');
+        return location.origin + '/s?cache=' + encodeURIComponent(proxyPath);
+      } catch {
+        return location.origin + '/s';
+      }
+    }
+
+    async function copySessionLink() {
+      const link = buildSessionLinkForActiveTab();
+      if (!link) return;
+      try {
+        await navigator.clipboard.writeText(link);
+        // Minimal feedback without needing extra UI.
+        console.log('Copied session link:', link);
+      } catch {
+        window.prompt('Copy this session link:', link);
+      }
+    }
+
+    document.getElementById('btn-copy-link').onclick = copySessionLink;
+
+    // Safe shortcut: copy session link (does not close tabs or redirect).
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey && e.shiftKey && (e.key === 'L' || e.key === 'l'))) return;
+      // Don't steal focus while typing.
+      const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      e.preventDefault();
+      copySessionLink();
+    });
 
     // INIT
     window.addEventListener('load', async () => {
