@@ -26,7 +26,8 @@ const waitForBareMux = () => {
 };
 
 const swRoutes = {
-  uv: ['{{route}}{{/uv/networking.sw.js}}', '{{route}}{{/uv/sw-blacklist.js}}'],
+  // The actual SW entrypoints are sw.js / sw-blacklist.js (networking.sw.js is imported by them).
+  uv: ['{{route}}{{/uv/sw.js}}', '{{route}}{{/uv/sw-blacklist.js}}'],
   sj: ['{{route}}{{/scram/working.sw.js}}', '{{route}}{{/scram/working.sw-blacklist.js}}'],
 };
 const swAllowedHostnames = ['localhost', '127.0.0.1'];
@@ -186,11 +187,44 @@ async function registerServiceWorker() {
   const uvReg = await navigator.serviceWorker.register(usedSW, { scope: '/network/' });
   console.log('UV service worker registered:', uvReg.scope);
 
-  // Register Scramjet
-  const sjSW = swRoutes.sj[hideAds ? 1 : 0];
-  console.log('Registering Scramjet service worker:', sjSW);
-  const sjReg = await navigator.serviceWorker.register(sjSW, { scope: '/worker/' });
-  console.log('Scramjet service worker registered:', sjReg.scope);
+  // Wait for the SW to activate so the first iframe navigation doesn't race and land on about:blank.
+  await new Promise((resolve) => {
+    const reg = uvReg;
+    const sw = reg.active || reg.installing || reg.waiting;
+    if (!sw) return resolve();
+    if (sw.state === 'activated') return resolve();
+    const onChange = () => {
+      if (sw.state === 'activated') {
+        sw.removeEventListener('statechange', onChange);
+        resolve();
+      }
+    };
+    sw.addEventListener('statechange', onChange);
+    setTimeout(() => {
+      try { sw.removeEventListener('statechange', onChange); } catch { }
+      resolve();
+    }, 4000);
+  });
+
+  // Scramjet is disabled by default because its IndexedDB schema breaks frequently and slows the app.
+  const enableScramjet = readStorage('EnableScramjet') === true;
+  if (enableScramjet) {
+    const sjSW = swRoutes.sj[hideAds ? 1 : 0];
+    console.log('Registering Scramjet service worker:', sjSW);
+    const sjReg = await navigator.serviceWorker.register(sjSW, { scope: '/worker/' });
+    console.log('Scramjet service worker registered:', sjReg.scope);
+  } else {
+    // Clean up any previously-registered Scramjet worker so it can't keep breaking pages.
+    const registrations2 = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations2) {
+      try {
+        if (registration.scope && new URL(registration.scope).pathname.startsWith('/worker/')) {
+          console.log('Unregistering Scramjet SW (disabled):', registration.scope);
+          await registration.unregister();
+        }
+      } catch { }
+    }
+  }
 
   // Small delay to allow SWs to start activating
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -201,8 +235,10 @@ async function initialize() {
   console.log('=== Proxy Initialization Starting ===');
 
   try {
-    // Do this early so Scramjet doesn't crash the wrapper UI due to stale IndexedDB schema.
-    await ensureScramjetDbSchema();
+    // Only touch Scramjet IDB if the user explicitly enabled Scramjet.
+    if (readStorage('EnableScramjet') === true) {
+      await ensureScramjetDbSchema();
+    }
 
     // Step 1: Wait for BareMux library to load
     await waitForBareMux();

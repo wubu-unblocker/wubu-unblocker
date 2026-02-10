@@ -9,6 +9,8 @@
   <!--HEAD-CONTENT-->
   {{inline}}{{
   <script src="{{route}}{{baremux/index.js}}{{inline}}" defer></script>
+  <!-- Scramjet bundle is kept for compatibility with preset buttons and legacy handlers.
+       Scramjet SW is disabled by default in register-sw.js unless EnableScramjet=true. -->
   <script src="{{route}}{{scram/scramjet.bundle.js}}{{inline}}" defer></script>
   <script src="{{route}}{{uv/networking.bundle.js}}{{inline}}" defer></script>
   <script src="{{route}}{{uv/networking.config.js}}{{inline}}" defer></script>

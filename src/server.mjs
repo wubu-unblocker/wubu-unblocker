@@ -63,6 +63,23 @@ const rammerheadScopes = [
   '/syncLocalStorage',
   '/api/shuffleDict',
   '/mainport',
+  // Some Rammerhead client builds reference service routes under a "/rammer/" prefix.
+  // Support both to avoid 404/MIME issues that break sign-in and large apps (YouTube, etc).
+  '/rammer/rammerhead.js',
+  '/rammer/hammerhead.js',
+  '/rammer/transport-worker.js',
+  '/rammer/task.js',
+  '/rammer/iframe-task.js',
+  '/rammer/worker-hammerhead.js',
+  '/rammer/messaging',
+  '/rammer/sessionexists',
+  '/rammer/deletesession',
+  '/rammer/newsession',
+  '/rammer/editsession',
+  '/rammer/needpassword',
+  '/rammer/syncLocalStorage',
+  '/rammer/api/shuffleDict',
+  '/rammer/mainport',
 ].map((pathname) => pathname.replace('/', serverUrl.pathname));
 
 const rammerheadSession = new RegExp(
@@ -73,6 +90,8 @@ const rammerheadSession = new RegExp(
       const url = new URL(req.url, serverUrl);
       return (
         rammerheadScopes.includes(url.pathname) ||
+        // Some RH resources are referenced under /rammer/...; treat as RH scope too.
+        url.pathname.startsWith(getAltPrefix('rammer', serverUrl.pathname)) ||
         rammerheadSession.test(url.pathname)
       );
     } catch (e) {
@@ -80,11 +99,16 @@ const rammerheadSession = new RegExp(
     }
   },
   routeRhRequest = (req, res) => {
+    // Strip base path and optional /rammer prefix before handing to Rammerhead.
     req.url = req.url.slice(serverUrl.pathname.length - 1);
+    if (req.url === '/rammer') req.url = '/';
+    else if (req.url.startsWith('/rammer/')) req.url = req.url.slice('/rammer'.length);
     rh.emit('request', req, res);
   },
   routeRhUpgrade = (req, socket, head) => {
     req.url = req.url.slice(serverUrl.pathname.length - 1);
+    if (req.url === '/rammer') req.url = '/';
+    else if (req.url.startsWith('/rammer/')) req.url = req.url.slice('/rammer'.length);
     rh.emit('upgrade', req, socket, head);
   };
 
@@ -96,7 +120,10 @@ startBlooketBrowser().catch((err) => console.error('Failed to start Blooket Brow
 
 // Create a server factory for Rammerhead, Wisp, and Blooket
 const serverFactory = (handler) => {
-  return createServer()
+  // Some modern sites (notably Google/YouTube) can accumulate very large Cookie headers
+  // when proxied, which may exceed Node's default 16KB header limit and cause HTTP 431.
+  // Keep this bounded to reduce DoS risk while avoiding common breakage.
+  return createServer({ maxHeaderSize: 64 * 1024 })
     .on('request', (req, res) => {
       if (shouldRouteRh(req)) routeRhRequest(req, res);
       else handler(req, res);
@@ -178,6 +205,14 @@ app.register(multipart, {
     maxAge: '7d',
     immutable: true,
     cacheControl: true,
+    // Service worker scripts must not be cached as immutable or updates will be delayed/stuck.
+    // This also helps reduce "random" proxy breakage after updates.
+    setHeaders: (res, pathName) => {
+      const p = String(pathName || '').toLowerCase();
+      if (p.endsWith('sw.js') || p.endsWith('sw-blacklist.js')) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
+      }
+    },
   });
 });
 
@@ -897,12 +932,95 @@ app.get(serverUrl.pathname + 'github/:redirect', (req, reply) => {
   else reply.code(404).type(supportedTypes.default).send(preloaded404);
 });
 
-if (serverUrl.pathname === '/')
+if (serverUrl.pathname === '/') {
+  // If a proxied page generates root-relative asset URLs (e.g. "/cdn/..."),
+  // the browser will request them outside the UV SW scope and get our HTML 404.
+  // Detect that case via Referer and redirect into the UV service prefix so the SW can proxy it.
+  const uvServicePrefix = getAltPrefix('uv', serverUrl.pathname) + 'service/';
+
+  const xorTransform = (str) =>
+    String(str || '')
+      .split('')
+      .map((ch, i) =>
+        i % 2 ? String.fromCharCode(ch.charCodeAt(0) ^ 2) : ch
+      )
+      .join('');
+
+  const xorEncode = (str) => encodeURIComponent(xorTransform(str));
+  const xorDecode = (str) => xorTransform(decodeURIComponent(String(str || '')));
+
+  const decodeUvFromUrl = (url) => {
+    try {
+      const u = new URL(url);
+      if (!u.pathname.startsWith(uvServicePrefix)) return null;
+      const encoded = u.pathname.slice(uvServicePrefix.length);
+      if (!encoded) return null;
+      return xorDecode(encoded);
+    } catch {
+      return null;
+    }
+  };
+
+  const allowedAssetExts = new Set([
+    'css',
+    'js',
+    'mjs',
+    'json',
+    'wasm',
+    'map',
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'svg',
+    'webp',
+    'ico',
+    'woff',
+    'woff2',
+    'ttf',
+    'otf',
+    'eot',
+  ]);
+
+  const internalPrefixes = [
+    getAltPrefix('uv', serverUrl.pathname),
+    getAltPrefix('scram', serverUrl.pathname),
+    getAltPrefix('baremux', serverUrl.pathname),
+    getAltPrefix('wisp', serverUrl.pathname),
+    serverUrl.pathname + 'assets/',
+    serverUrl.pathname + 'api/',
+    serverUrl.pathname + 'scripts/',
+    '/GAMESFORCHEATS/',
+  ];
+
   // Set an error page for invalid paths outside the query string system.
   app.setNotFoundHandler((req, reply) => {
+    try {
+      const u = new URL(req.url, 'http://local.invalid');
+      const pathname = u.pathname || '';
+
+      // Never interfere with our own internal routes/prefixes.
+      if (!internalPrefixes.some((p) => pathname.startsWith(p))) {
+        const ext = (pathname.split('.').pop() || '').toLowerCase();
+        if (ext && allowedAssetExts.has(ext)) {
+          const referer = String(req.headers.referer || '');
+          const remoteRef = decodeUvFromUrl(referer);
+          if (remoteRef) {
+            const remoteOrigin = new URL(remoteRef).origin;
+            const targetRemote = new URL(pathname + (u.search || ''), remoteOrigin).href;
+            const redirectTo = uvServicePrefix + xorEncode(targetRemote);
+            reply.redirect(redirectTo);
+            return reply;
+          }
+        }
+      }
+    } catch {
+      // Fall through to the default 404 page.
+    }
+
     reply.code(404).type(supportedTypes.default).send(preloaded404);
   });
-else {
+} else {
   // Apply patch if the server URL has a prefix.
   app.get(serverUrl.pathname, (req, reply) => {
     reply

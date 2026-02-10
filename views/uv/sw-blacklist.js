@@ -2,84 +2,87 @@ importScripts('{{route}}{{/uv/uv.bundle.js}}');
 importScripts('{{route}}{{/uv/uv.config.js}}');
 importScripts(self['{{__uv$config}}'].sw || '{{route}}{{/uv/uv.sw.js}}');
 
-/*
-
-Workerware does not work yet due to one of the following possibilities:
-
-1. UV or the bare client is not updated to support workerware yet.
-2. Workerware is unfinished.
-3. We are doofuses and do not know how to use workerware properly.
-
-Going to implement a ghetto domain blacklist for now.
-
-importScripts("./workerware.js");
-
-const ww = new WorkerWare({
-  debug: true,
-  randomNames: true,
-  timing: true
-});
-
-
-ww.use({
-  function: event => console.log(event),
-  events: ["fetch", "message"]
-});
-
-*/
-
 const uv = new UVServiceWorker();
 
-// Get list of blacklisted domains.
-const blacklist = {};
-fetch('{{route}}{{/assets/json/blacklist.json}}').then((request) => {
-  request.json().then((jsonData) => {
-    // Organize each domain by their tld (top level domain) ending.
-    jsonData.forEach((domain) => {
-      const domainTld = domain.replace(/.+(?=\.\w)/, '');
-      if (!blacklist.hasOwnProperty(domainTld)) blacklist[domainTld] = [];
+// Make updates apply quickly without requiring multiple hard refreshes.
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
-      // Store each entry in an array. Each tld has its own array, which will
-      // later be concatenated into a regular expression.
-      blacklist[domainTld].push(
-        encodeURIComponent(domain.slice(0, -domainTld.length))
+/**
+ * Maps TLD -> regex for its left-hand-side patterns.
+ * @type {Record<string, RegExp>}
+ */
+const compiled = Object.create(null);
+
+fetch('{{route}}{{/assets/json/blacklist.json}}')
+  .then((r) => r.json())
+  .then((list) => {
+    /** @type {Record<string, string[]>} */
+    const byTld = Object.create(null);
+    for (const entry of list) {
+      const tld = entry.replace(/.+(?=\.\w)/, '');
+      if (!Object.prototype.hasOwnProperty.call(byTld, tld)) byTld[tld] = [];
+
+      byTld[tld].push(
+        encodeURIComponent(entry.slice(0, -tld.length))
           .replace(/([()])/g, '\\$1')
           .replace(/(\*\.)|\./g, (match, firstExpression) =>
             firstExpression ? '(?:.+\\.)?' : '\\' + match
           )
       );
-    });
+    }
 
-    // Turn each domain list into a regular expression and prevent this
-    // from being accidentally modified afterward.
-    for (let [domainTld, domainList] of Object.entries(blacklist))
-      blacklist[domainTld] = new RegExp(`^(?:${domainList.join('|')})$`);
-    Object.freeze(blacklist);
+    for (const [tld, parts] of Object.entries(byTld)) {
+      compiled[tld] = new RegExp(`^(?:${parts.join('|')})$`);
+    }
+    Object.freeze(compiled);
+  })
+  .catch(() => {
+    Object.freeze(compiled);
   });
-});
+
+function tryGetRemoteHostname(requestUrl) {
+  try {
+    const u = new URL(requestUrl);
+    const prefixPath = new URL(uv.config.prefix, location.origin).pathname;
+    if (!u.pathname.startsWith(prefixPath)) return null;
+
+    const encoded = u.pathname.slice(prefixPath.length);
+    if (!encoded) return null;
+
+    const decoded = uv.config.decodeUrl(encoded);
+    if (!decoded) return null;
+
+    return new URL(decoded).hostname || null;
+  } catch {
+    return null;
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
-      if (uv.route(event)) {
-        // The one and only ghetto domain blacklist.
-        const domain = new URL(
-            uv.config.decodeUrl(
-              new URL(event.request.url).pathname.replace(uv.config.prefix, '')
-            )
-          ).hostname,
-          domainTld = domain.replace(/.+(?=\.\w)/, '');
+      if (!uv.route(event)) return await fetch(event.request);
 
-        // If the domain is in the blacklist, return a 406 response code.
-        if (
-          blacklist.hasOwnProperty(domainTld) &&
-          blacklist[domainTld].test(domain.slice(0, -domainTld.length))
-        )
-          return new Response(new Blob(), { status: 406 });
-
-        return await uv.fetch(event);
+      // Only block when decoding succeeds. Some scripts/modules can generate
+      // relative URLs under the UV prefix; those must not crash the SW.
+      const host = tryGetRemoteHostname(event.request.url);
+      if (host) {
+        const tld = host.replace(/.+(?=\.\w)/, '');
+        if (Object.prototype.hasOwnProperty.call(compiled, tld)) {
+          const left = host.slice(0, -tld.length);
+          if (compiled[tld].test(left)) {
+            return new Response(new Blob(), { status: 406 });
+          }
+        }
       }
-      return await fetch(event.request);
+
+      return await uv.fetch(event);
     })()
   );
 });
+

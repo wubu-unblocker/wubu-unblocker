@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link id="browser-favicon" rel="shortcut icon" href="/favicon.ico">
 
-  <script src="{{route}}{{/scram/working.all.js}}" defer data-module></script>
+  <!-- Scramjet is currently disabled by default due to frequent IndexedDB/schema breakage that slows the app.
+       UV + BareMux is the primary path. -->
   <script src="{{route}}{{/baremux/index.js}}" defer data-module></script>
   <script src="{{route}}{{/uv/networking.bundle.js}}" defer data-module></script>
   <script src="{{route}}{{/uv/networking.config.js}}" defer data-module></script>
@@ -308,12 +309,41 @@
       }
     }
 
+    function isRammerheadProxyHref(href) {
+      try {
+        const u = new URL(href, location.origin);
+        if (u.origin !== location.origin) return false;
+        const segs = u.pathname.split('/').filter(Boolean);
+        const isSession = (s) => /^[a-z0-9]{32}$/i.test(String(s || ''));
+        // Rammerhead session URLs are usually /<32chars>/... (or /<base>/<32chars>/... if hosted under a base path)
+        return isSession(segs[0]) || isSession(segs[1]);
+      } catch {
+        return false;
+      }
+    }
+
     function getDisplayedUrlFromIframe(iframe) {
       try {
         const href = iframe?.contentWindow?.location?.href;
         if (!href) return null;
         if (href === 'about:blank' || href.startsWith('about:blank')) return null;
-        return decodeUvServiceUrl(href) || href;
+        // Don't show internal Rammerhead session URLs in the address bar.
+        if (isRammerheadProxyHref(href)) return null;
+        const decoded = decodeUvServiceUrl(href);
+        if (decoded) return decoded;
+
+        // If this is a UV service URL but UV isn't ready yet (or decode failed),
+        // don't clobber the URL bar with localhost URLs.
+        try {
+          const cfg = self.__uv$config;
+          if (cfg && cfg.prefix) {
+            const prefixPath = new URL(cfg.prefix, location.origin).pathname;
+            const u = new URL(href, location.origin);
+            if (u.pathname.startsWith(prefixPath)) return null;
+          }
+        } catch { }
+
+        return href;
       } catch {
         return null;
       }
@@ -333,6 +363,130 @@
       }
 
       return target;
+    }
+
+    // Domains where UV frequently breaks sign-in flows. Prefer Rammerhead for these.
+    const RH_HOST_ALLOWLIST = [
+      // Keep this list focused on auth-heavy domains; routing entire video sites via RH is slower.
+      'accounts.google.com',
+      'myaccount.google.com',
+      'consent.google.com',
+      'signin.google.com',
+      'accounts.youtube.com',
+    ];
+
+    function isGoogleAuthFlow(urlStr) {
+      try {
+        const u = new URL(urlStr);
+        const h = (u.hostname || '').toLowerCase();
+        return (
+          h === 'accounts.google.com' ||
+          h === 'myaccount.google.com' ||
+          h === 'consent.google.com' ||
+          h === 'signin.google.com' ||
+          h === 'accounts.youtube.com'
+        );
+      } catch {
+        return false;
+      }
+    }
+
+    function shouldUseRammerheadFor(urlStr) {
+      try {
+        const u = new URL(urlStr);
+        const h = (u.hostname || '').toLowerCase();
+        if (!h) return false;
+        if (RH_HOST_ALLOWLIST.includes(h)) return true;
+        if (h.endsWith('.google.com') && (h.startsWith('accounts.') || h.startsWith('myaccount.') || h.startsWith('consent.') || h.startsWith('signin.'))) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    }
+
+    function getBaseRoutePrefix() {
+      // {{route}} is empty on root deployments; otherwise it's the base path.
+      const r = String('{{route}}' || '');
+      if (!r) return '';
+      return (r.startsWith('/') ? r : '/' + r).replace(/\/+$/, '');
+    }
+
+    async function rhFetchText(pathname) {
+      const base = getBaseRoutePrefix();
+      const p = String(pathname || '');
+      const url = base + (p.startsWith('/') ? p : '/' + p);
+      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error(`Rammerhead API ${p} failed: ${res.status}`);
+      return await res.text();
+    }
+
+    async function getOrCreateRammerheadSessionId() {
+      const key = 'session-string';
+      const existing = (localStorage.getItem(key) || '').trim();
+      if (existing) {
+        try {
+          const st = (await rhFetchText('/sessionexists?id=' + encodeURIComponent(existing))).trim();
+          if (st === 'exists') return existing;
+        } catch { }
+      }
+
+      const id = (await rhFetchText('/newsession')).trim();
+      if (!/^[a-z0-9]{32}$/i.test(id)) throw new Error('Invalid Rammerhead session id');
+      localStorage.setItem(key, id);
+      return id;
+    }
+
+    function mod(n, m) {
+      return ((n % m) + m) % m;
+    }
+
+    class RhStrShuffler {
+      constructor(dictionary) {
+        this.dictionary = String(dictionary || '');
+      }
+      shuffle(str) {
+        const baseDictionary = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~-';
+        const shuffledIndicator = '_rhs';
+        const s = String(str || '');
+        if (!s.indexOf(shuffledIndicator)) return s;
+
+        let out = '';
+        for (let i = 0; i < s.length; i++) {
+          const ch = s[i];
+          const idx = baseDictionary.indexOf(ch);
+          if (ch === '%' && s.length - i >= 3) out += ch + s[++i] + s[++i];
+          else if (idx === -1) out += ch;
+          else out += this.dictionary[mod(idx + i, baseDictionary.length)];
+        }
+        return shuffledIndicator + out;
+      }
+    }
+
+    async function getRammerheadProxyUrl(target) {
+      const id = await getOrCreateRammerheadSessionId();
+      let dict = null;
+      try {
+        const raw = await rhFetchText('/api/shuffleDict?id=' + encodeURIComponent(id));
+        dict = JSON.parse(raw);
+      } catch { }
+
+      const encoded = dict ? new RhStrShuffler(dict).shuffle(target) : target;
+      const base = getBaseRoutePrefix();
+      return location.origin + base + '/' + id + '/' + encoded;
+    }
+
+    async function getProxyUrlAsync(target, opts = {}) {
+      const force = String(opts.forceEngine || '').toLowerCase();
+      const wantRh = force === 'rammerhead' || (force !== 'ultraviolet' && shouldUseRammerheadFor(target));
+
+      if (wantRh) {
+        try {
+          return { engine: 'rammerhead', url: await getRammerheadProxyUrl(target) };
+        } catch (e) {
+          console.warn('Rammerhead failed, falling back to UV:', e);
+        }
+      }
+      return { engine: 'ultraviolet', url: getProxyUrl(target) };
     }
 
     // Initialize Scramjet
@@ -371,7 +525,7 @@
 
       // Create Iframe
       const iframe = document.createElement('iframe');
-      iframe.sandbox = "allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-modals allow-orientation-lock allow-popups allow-presentation";
+      iframe.sandbox = "allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-modals allow-orientation-lock allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-presentation";
       container.appendChild(iframe);
 
       const tabData = {
@@ -401,7 +555,9 @@
 
       // Navigate if URL provided
       if (initialUrl) {
-        navigateTab(id, initialUrl);
+        Promise.resolve(navigateTab(id, initialUrl)).catch((e) =>
+          console.error('Initial navigate failed:', e)
+        );
       }
     }
 
@@ -440,7 +596,7 @@
       }
     }
 
-    function navigateTab(id, url) {
+    async function navigateTab(id, url, opts = {}) {
       const tab = tabs.find(t => t.id === id);
       if (!tab) return;
 
@@ -465,11 +621,31 @@
 
 
       // Apply proxy
-      const target = getProxyUrl(processed);
+      const prox = await getProxyUrlAsync(processed, opts);
+      const target = prox.url;
+      tab.engine = prox.engine;
 
       // Update URL bar if active
       if (activeTabId === id) {
         setUrlBarValue(processed);
+      }
+
+      // Google sign-in commonly blocks embedded/proxied login flows when run inside iframes.
+      // If this is an auth flow and we're using Rammerhead, open in a top-level tab/window.
+      if (prox.engine === 'rammerhead' && isGoogleAuthFlow(processed) && readStorage && readStorage('AuthPopup') !== false) {
+        try {
+          const w = window.open(target, '_blank', 'noopener,noreferrer');
+          if (w) {
+            // Keep the current tab on the last non-proxy URL so users don't see localhost URLs.
+            tab.rawUrl = processed;
+            tab.displayUrl = processed;
+            tab.url = processed;
+            if (activeTabId === id) setUrlBarValue(processed);
+            // Don't navigate iframe; the login continues in the new tab.
+            updateTabInfo(tab);
+            return;
+          }
+        } catch { }
       }
 
       tab.iframe.src = target;
@@ -503,6 +679,16 @@
         // Keep the URL bar synced to the current page inside the iframe.
         const shown = getDisplayedUrlFromIframe(iframe);
         if (shown) {
+          // If the user gets navigated into Google/YouTube auth flows while using UV, switch to Rammerhead.
+          // This is a pragmatic workaround for Google's "This browser or app may not be secure" / unsupported browser checks.
+          if (shouldUseRammerheadFor(shown) && tab.engine !== 'rammerhead') {
+            const now = Date.now();
+            if (!tab._lastAuthSwitch || now - tab._lastAuthSwitch > 8000) {
+              tab._lastAuthSwitch = now;
+              Promise.resolve(navigateTab(tab.id, shown, { forceEngine: 'rammerhead' })).catch(() => { });
+              return;
+            }
+          }
           tab.displayUrl = shown;
           tab.url = shown;
           if (tab.id === activeTabId) setUrlBarValue(shown);
@@ -682,6 +868,21 @@
         t.iframe.src = proxyUrl;
         t.title = "Browsing";
         t.el.querySelector('.tab-title').textContent = "Browsing";
+
+        // Best-effort: decode the UV service URL so the address bar shows the real URL immediately.
+        // Otherwise the UI may briefly show localhost until UV config is ready.
+        try {
+          for (let i = 0; i < 40 && !window.__uv$config; i++) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+          const decoded = decodeUvServiceUrl(new URL(proxyUrl, location.origin).href);
+          if (decoded) {
+            t.rawUrl = decoded;
+            t.displayUrl = decoded;
+            t.url = decoded;
+            setUrlBarValue(decoded);
+          }
+        } catch { }
       } else {
         createTab();
       }

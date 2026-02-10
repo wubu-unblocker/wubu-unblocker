@@ -78,9 +78,42 @@ class UVServiceWorker extends Ultraviolet.EventEmitter {
       const db = await ultraviolet.cookie.db();
 
       ultraviolet.meta.origin = location.origin;
-      ultraviolet.meta.base = ultraviolet.meta.url = new URL(
-        ultraviolet.sourceUrl(request.url)
-      );
+      try {
+        ultraviolet.meta.base = ultraviolet.meta.url = new URL(
+          ultraviolet.sourceUrl(request.url)
+        );
+      } catch (err) {
+        // Some scripts (notably Cloudflare challenge scripts and some ESM loaders)
+        // can generate relative requests under the UV prefix like:
+        //   /network/service/<file>.js
+        // Those won't decode as a full UV URL. Resolve them relative to the decoded
+        // referrer instead of crashing/returning ERR_FAILED.
+        try {
+          const u = new URL(request.url);
+          const prefixPath = new URL(this.config.prefix, location.origin).pathname;
+          let rel = u.pathname.startsWith(prefixPath)
+            ? u.pathname.slice(prefixPath.length)
+            : u.pathname.replace(this.config.prefix, '');
+          try {
+            rel = decodeURIComponent(rel);
+          } catch {
+            // ignore
+          }
+          rel += u.search || '';
+
+          if (
+            request.referrer &&
+            request.referrer.startsWith(location.origin + this.config.prefix)
+          ) {
+            const refRemote = new URL(ultraviolet.sourceUrl(request.referrer));
+            ultraviolet.meta.base = ultraviolet.meta.url = new URL(rel, refRemote);
+          } else {
+            throw err;
+          }
+        } catch {
+          throw err;
+        }
+      }
 
       const requestCtx = new RequestContext(
         request,
@@ -274,7 +307,15 @@ class UVServiceWorker extends Ultraviolet.EventEmitter {
       if (responseCtx.body) {
         switch (request.destination) {
           case 'script':
-            responseCtx.body = ultraviolet.js.rewrite(await response.text());
+            {
+              const text = await response.text();
+              const path = ultraviolet.meta.url?.pathname || '';
+              // Avoid rewriting Cloudflare's /cdn-cgi challenge scripts; rewriting breaks them and can
+              // cause widespread "unsupported browser" / login failures on CF-protected sites.
+              responseCtx.body = path.includes('/cdn-cgi/')
+                ? text
+                : ultraviolet.js.rewrite(text);
+            }
             break;
           case 'worker':
             {
