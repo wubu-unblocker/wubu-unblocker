@@ -1,54 +1,9 @@
-// register-sw.js - Fixed version with proper BareMux initialization order
+// Scramjet-first proxy bootstrap for Wubu UI.
+// Keeps existing UI flows intact while replacing UV bootstrap logic.
 
-const waitForBareMux = () => {
-  return new Promise((resolve, reject) => {
-    if (typeof BareMux !== 'undefined' && BareMux.BareMuxConnection) {
-      console.log('BareMux already available');
-      resolve();
-      return;
-    }
+const swAllowedHostnames = ["localhost", "127.0.0.1"];
+const storageId = "{{hu-lts}}-storage";
 
-    let attempts = 0;
-    const maxAttempts = 100; // 5 seconds total
-
-    const check = setInterval(() => {
-      attempts++;
-      if (typeof BareMux !== 'undefined' && BareMux.BareMuxConnection) {
-        clearInterval(check);
-        console.log('BareMux became available after', attempts * 50, 'ms');
-        resolve();
-      } else if (attempts >= maxAttempts) {
-        clearInterval(check);
-        reject(new Error('BareMux did not load within 5 seconds'));
-      }
-    }, 50);
-  });
-};
-
-const swRoutes = {
-  // The actual SW entrypoints are sw.js / sw-blacklist.js (networking.sw.js is imported by them).
-  uv: ['{{route}}{{/uv/sw.js}}', '{{route}}{{/uv/sw-blacklist.js}}'],
-  sj: ['{{route}}{{/scram/working.sw.js}}', '{{route}}{{/scram/working.sw-blacklist.js}}'],
-};
-const swAllowedHostnames = ['localhost', '127.0.0.1'];
-// Use /cron/ which is the aliased wisp endpoint
-const wispUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/cron/';
-// Public fallback Wisp server in case local one has network restrictions
-const publicWispUrl = 'wss://wisp.mercurywork.shop/';
-
-// Transport keys are historically inconsistent across UIs:
-// - Some pages store 'unix'/'epoch' (SEO/aliased prefixes)
-// - Some store 'libcurl'/'epoxy' (canonical names)
-// Support both so the user's selection actually applies.
-const transports = {
-  epoxy: '{{route}}{{/epoxy/index.mjs}}',
-  libcurl: '{{route}}{{/libcurl/index.mjs}}',
-  epoch: '{{route}}{{/epoxy/index.mjs}}',
-  unix: '{{route}}{{/libcurl/index.mjs}}',
-};
-
-// Share the same settings storage bucket as the settings UI (csel.js) and the dist build.
-const storageId = 'net-time-storage';
 const getStorage = () => {
   try {
     return JSON.parse(localStorage.getItem(storageId)) || {};
@@ -56,221 +11,259 @@ const getStorage = () => {
     return {};
   }
 };
+
 const readStorage = (name) => getStorage()[name];
 
-// Default to Epoxy for Chromium/WebKit (faster), and libcurl for Firefox (compat).
-const defaultTransport = /firefox/i.test(navigator.userAgent) ? 'unix' : 'epoch';
+const transports = {
+  epoxy: "{{route}}{{/epoxy/index.mjs}}",
+  libcurl: "{{route}}{{/libcurl/index.mjs}}",
+  epoch: "{{route}}{{/epoxy/index.mjs}}",
+  unix: "{{route}}{{/libcurl/index.mjs}}",
+};
 
-let bareMuxConnection = null;
+const defaultTransport = "epoch";
+const hostedOnHf = /\.hf\.space$/i.test(location.hostname);
+const defaultWisp = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/wisp/}}";
+const fallbackWisp = "wss://wisp.mercurywork.shop/";
+let lastTransportSelection = null;
+let recoveringTransport = false;
 
-async function ensureScramjetDbSchema() {
-  // Scramjet sometimes changes its IDB schema; stale DBs can throw:
-  // "Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found."
-  // If schema looks wrong, delete it so Scramjet can recreate it cleanly.
+function makeWispCandidates() {
+  const localCron = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/cron/}}";
+  const localWisp = defaultWisp;
+  const storedPublic = readStorage("PublicWisp");
+
+  // Respect explicit user choice if present.
+  if (storedPublic === true) return [fallbackWisp, localWisp, localCron];
+  if (storedPublic === false) return [localWisp, localCron, fallbackWisp];
+
+  // HF Spaces often have unreliable local websocket proxying under load.
+  // Prefer public Wisp there; elsewhere keep local-first for latency.
+  if (hostedOnHf) return [fallbackWisp, localWisp, localCron];
+  return [localWisp, localCron, fallbackWisp];
+}
+
+function makeTransportCandidates() {
+  const configured = readStorage("Transport");
+  const list = [];
+  const pushMode = (mode) => {
+    const transportPath = transports[mode];
+    if (!transportPath) return;
+    if (!list.find((entry) => entry.mode === mode)) list.push({ mode, transportPath });
+  };
+
+  // On HF, libcurl frequently fails TLS handshakes. Bias toward epoxy.
+  if (hostedOnHf) {
+    pushMode("epoch");
+    // Only use libcurl as a final fallback when explicitly selected.
+    if (configured === "unix" || configured === "libcurl") pushMode("unix");
+  } else {
+    pushMode(configured);
+    pushMode(defaultTransport);
+    pushMode("epoch");
+    pushMode("unix");
+  }
+
+  return list;
+}
+
+async function verifyTransport(connection) {
+  // BareMux performs a ping on getTransport(); this catches dead SharedWorker ports
+  // before users hit a site and get random 500s.
+  const transportPath = await connection.getTransport();
+  if (!transportPath) throw new Error("Transport verification failed.");
+  return transportPath;
+}
+
+async function setBestTransport() {
+  if (typeof BareMux === "undefined" || !BareMux.BareMuxConnection) {
+    throw new Error("BareMux is not loaded.");
+  }
+
+  const workerPath = "{{route}}{{/baremux/worker.js}}";
+  localStorage.setItem("bare-mux-path", workerPath);
+
+  let connection = new BareMux.BareMuxConnection(workerPath);
+  const wispCandidates = makeWispCandidates();
+  const transportCandidates = makeTransportCandidates();
+
+  let lastErr = null;
+  for (const { mode, transportPath } of transportCandidates) {
+    for (const wsUrl of wispCandidates) {
+      try {
+        // Support both option names used across bare transports.
+        await connection.setTransport(transportPath, [{ websocket: wsUrl, wisp: wsUrl }]);
+        await verifyTransport(connection);
+        return { mode, transportPath, wsUrl, workerPath };
+      } catch (e) {
+        lastErr = e;
+        // Recreate connection in case port died between attempts.
+        connection = new BareMux.BareMuxConnection(workerPath);
+      }
+    }
+  }
+
+  throw lastErr || new Error("Failed to initialize transport.");
+}
+
+async function recoverTransport(reason = "unknown") {
+  if (recoveringTransport) return false;
+  recoveringTransport = true;
   try {
-    if (!('indexedDB' in self)) return;
-
-    const expectedStores = ['cookies', 'config'];
-    const dbName = '$scramjet';
-
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-
-    const hasAll =
-      expectedStores.every((s) => db.objectStoreNames && db.objectStoreNames.contains(s));
-    db.close();
-
-    if (hasAll) return;
-
-    console.warn('Scramjet IDB schema mismatch; resetting', { dbName });
-    await new Promise((resolve) => {
-      const del = indexedDB.deleteDatabase(dbName);
-      del.onsuccess = () => resolve();
-      del.onerror = () => resolve();
-      del.onblocked = () => resolve();
-    });
+    console.warn("Attempting transport recovery. Reason:", reason);
+    const selected = await setBestTransport();
+    lastTransportSelection = selected;
+    console.log("Transport recovered:", selected.transportPath, selected.wsUrl);
+    return true;
   } catch (e) {
-    console.warn('ensureScramjetDbSchema failed (ignored):', e);
+    console.error("Transport recovery failed:", e);
+    return false;
+  } finally {
+    recoveringTransport = false;
   }
 }
 
-async function initializeBareMux() {
-  console.log('Initializing BareMux connection...');
+function deleteIndexedDb(name) {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+      req.onblocked = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
 
-  // Determine which Wisp server to use. Prefer local for speed, fall back to public for reliability.
-  let usedWispUrl = wispUrl;
+async function initScramjetController(controller) {
+  if (!controller || typeof controller.init !== "function") return;
+  try {
+    await controller.init();
+  } catch (e) {
+    const msg = String(e?.message || e || "").toLowerCase();
+    const isSchemaError =
+      msg.includes("object stores") ||
+      msg.includes("notfounderror") ||
+      msg.includes("idbdatabase");
+    if (!isSchemaError) throw e;
 
-  // If user explicitly chose one, use it. Otherwise, use local.
-  const storedPublic = readStorage('PublicWisp');
-  if (storedPublic === true) {
-    usedWispUrl = publicWispUrl;
-  } else if (storedPublic === false) {
-    usedWispUrl = wispUrl;
-  } else {
-    // Default to public Wisp on hosted/cloud deployments, since some hosts restrict egress.
-    usedWispUrl = swAllowedHostnames.includes(location.hostname) ? wispUrl : publicWispUrl;
+    // Heal corrupted/outdated Scramjet schema automatically.
+    await Promise.all([deleteIndexedDb("$scramjet"), deleteIndexedDb("scramjet")]);
+    await controller.init();
   }
+}
 
-  const transportMode =
-    transports[readStorage('Transport')] ||
-    transports[defaultTransport] ||
-    transports['unix'];
-  const transportOptions = { wisp: usedWispUrl };
-
-  console.log('Transport mode:', transportMode);
-  console.log('Wisp URL:', usedWispUrl);
+async function installUvCompatShim() {
+  // A lot of existing Wubu UI code expects __uv$config. Map it to Scramjet.
+  if (!self.$scramjetLoadController) return false;
 
   try {
-    // Create the connection - this sets up the SharedWorker and message listeners
-    // Use /gmt/ which is the aliased path for baremux
-    // Store in localStorage for BareMux fallback mechanism
-    const workerPath = '{{route}}{{/baremux/worker.js}}';
-    localStorage.setItem('bare-mux-path', workerPath);
-    console.log('Set bare-mux-path in localStorage:', workerPath);
+    const { ScramjetController } = self.$scramjetLoadController();
+    const prefix = "{{route}}{{/scram/network/}}";
+    const controller = new ScramjetController({ prefix });
+    await initScramjetController(controller);
 
-    bareMuxConnection = new BareMux.BareMuxConnection(workerPath);
-    console.log('BareMux connection object created');
+    const stripPrefix = (value) => {
+      const text = String(value || "");
+      if (text.startsWith(prefix)) return text.slice(prefix.length);
+      if (text.startsWith(location.origin + prefix)) return text.slice((location.origin + prefix).length);
+      return text;
+    };
 
-    // Set the transport - this stores the transport in the SharedWorker
-    console.log('Setting transport...');
-
-    // If using libcurl, we must ensure it's loaded first
-    if (transportMode.includes('libcurl')) {
-      console.log('Ensuring libcurl is loaded...');
-      if (typeof libcurl !== 'undefined' && libcurl.load_wasm) {
-        await libcurl.load_wasm();
-      }
-    }
-
-    await bareMuxConnection.setTransport(transportMode, [transportOptions]);
-    console.log('Transport set successfully!');
-
+    self.__uv$config = {
+      prefix,
+      // UV callers append prefix themselves. Scramjet encodeUrl already includes it.
+      encodeUrl: (url) => stripPrefix(controller.encodeUrl(url)),
+      decodeUrl: (url) => {
+        const text = String(url || "");
+        const withPrefix = text.startsWith(prefix) ? text : prefix + text;
+        return controller.decodeUrl(withPrefix);
+      },
+      // Keep fields for compatibility with older callers.
+      bundle: "{{route}}{{/scram/scramjet.bundle.js}}",
+      config: "{{route}}{{/scram/scramjet.config.js}}",
+      sw: "{{route}}{{/scram/working.sw.js}}",
+    };
     return true;
-  } catch (err) {
-    console.error('BareMux initialization failed:', err);
+  } catch (e) {
+    console.warn("Failed to initialize Scramjet compatibility shim:", e);
     return false;
   }
 }
 
-async function registerServiceWorker() {
+async function registerScramjetSw() {
   if (!navigator.serviceWorker) {
-    if (location.protocol !== 'https:' && !swAllowedHostnames.includes(location.hostname)) {
-      throw new Error('Service workers require HTTPS (except on localhost)');
+    if (location.protocol !== "https:" && !swAllowedHostnames.includes(location.hostname)) {
+      throw new Error("Service workers require HTTPS (except localhost).");
     }
-    throw new Error("Your browser doesn't support service workers");
+    throw new Error("This browser does not support service workers.");
   }
 
-  // Determine which SW to use (blacklist version hides ads)
-  const hideAds = readStorage('HideAds') !== false;
-  const usedSW = swRoutes.uv[hideAds ? 1 : 0];
-
-  console.log('Registering service worker:', usedSW);
-
-  // Unregister any old service workers with different paths
+  const targetSw = "{{route}}{{/scram/working.sw.js}}";
+  const targetScope = "{{route}}{{/scram/}}";
+  const uvScope = "{{route}}{{/uv/}}";
   const registrations = await navigator.serviceWorker.getRegistrations();
-  for (const registration of registrations) {
-    if (registration.active) {
-      const currentPath = new URL(registration.active.scriptURL).pathname;
-      const targetPath = new URL(usedSW, location.origin).pathname;
-      if (currentPath !== targetPath) {
-        console.log('Unregistering old SW:', currentPath);
-        await registration.unregister();
-      }
+
+  // Remove conflicting UV registrations to avoid mixed routing behavior.
+  for (const reg of registrations) {
+    try {
+      const scopePath = new URL(reg.scope).pathname;
+      if (scopePath.startsWith(uvScope)) await reg.unregister();
+    } catch {
+      // ignore
     }
   }
 
-  // Register Ultraviolet
-  console.log('Registering UV service worker:', usedSW);
-  const uvReg = await navigator.serviceWorker.register(usedSW, { scope: '/network/' });
-  console.log('UV service worker registered:', uvReg.scope);
-
-  // Wait for the SW to activate so the first iframe navigation doesn't race and land on about:blank.
-  await new Promise((resolve) => {
-    const reg = uvReg;
-    const sw = reg.active || reg.installing || reg.waiting;
-    if (!sw) return resolve();
-    if (sw.state === 'activated') return resolve();
-    const onChange = () => {
-      if (sw.state === 'activated') {
-        sw.removeEventListener('statechange', onChange);
-        resolve();
-      }
-    };
-    sw.addEventListener('statechange', onChange);
-    setTimeout(() => {
-      try { sw.removeEventListener('statechange', onChange); } catch { }
-      resolve();
-    }, 4000);
-  });
-
-  // Scramjet is disabled by default because its IndexedDB schema breaks frequently and slows the app.
-  const enableScramjet = readStorage('EnableScramjet') === true;
-  if (enableScramjet) {
-    const sjSW = swRoutes.sj[hideAds ? 1 : 0];
-    console.log('Registering Scramjet service worker:', sjSW);
-    const sjReg = await navigator.serviceWorker.register(sjSW, { scope: '/worker/' });
-    console.log('Scramjet service worker registered:', sjReg.scope);
-  } else {
-    // Clean up any previously-registered Scramjet worker so it can't keep breaking pages.
-    const registrations2 = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations2) {
-      try {
-        if (registration.scope && new URL(registration.scope).pathname.startsWith('/worker/')) {
-          console.log('Unregistering Scramjet SW (disabled):', registration.scope);
-          await registration.unregister();
-        }
-      } catch { }
-    }
-  }
-
-  // Small delay to allow SWs to start activating
-  await new Promise(resolve => setTimeout(resolve, 500));
-  console.log('Service workers registration call complete');
+  await navigator.serviceWorker.register(targetSw, { scope: targetScope });
 }
 
 async function initialize() {
-  console.log('=== Proxy Initialization Starting ===');
+  console.log("=== Proxy Initialization Starting ===");
 
   try {
-    // Only touch Scramjet IDB if the user explicitly enabled Scramjet.
-    if (readStorage('EnableScramjet') === true) {
-      await ensureScramjetDbSchema();
-    }
+    await installUvCompatShim();
+    const selected = await setBestTransport();
+    lastTransportSelection = selected;
+    console.log("Transport mode:", selected.mode);
+    console.log("Transport path:", selected.transportPath);
+    console.log("Wisp URL:", selected.wsUrl);
 
-    // Step 1: Wait for BareMux library to load
-    await waitForBareMux();
-
-    // Step 2: Initialize BareMux (sets up SharedWorker and transport)
-    console.log('Step 2: Initializing BareMux...');
-    let bareMuxReady = await initializeBareMux();
-
-    if (!bareMuxReady) {
-      console.warn('Local BareMux failed, trying Public Wisp fallback for reliability...');
-      // Set PublicWisp to true in memory for this session and try again
-      const storage = getStorage();
-      storage['PublicWisp'] = true;
-      localStorage.setItem(storageId, JSON.stringify(storage));
-      bareMuxReady = await initializeBareMux();
-    }
-
-    if (!bareMuxReady) {
-      console.error('CRITICAL: All proxy transport initialization attempts failed.');
-    }
-
-    // Step 3: Small delay to ensure SharedWorker is fully operational
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Step 4: Register the service worker
-    await registerServiceWorker();
-
-    console.log('=== Proxy Initialization Complete ===');
-  } catch (err) {
-    console.error('=== Proxy Initialization Failed ===', err);
+    await registerScramjetSw();
+    console.log("=== Proxy Initialization Complete ===");
+  } catch (e) {
+    console.error("Proxy initialization failed:", e);
   }
 }
 
-// Start initialization and expose a global promise for other scripts to wait on
+function installAutoRecoveryHooks() {
+  const shouldRecover = (message) =>
+    /bare-mux/i.test(message) ||
+    /ping response/i.test(message) ||
+    /port is dead/i.test(message) ||
+    /transport verification failed/i.test(message);
+
+  window.addEventListener("error", (event) => {
+    const message = `${event?.message || ""} ${event?.error?.message || ""}`.toLowerCase();
+    if (shouldRecover(message)) recoverTransport(message);
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const message = `${event?.reason?.message || event?.reason || ""}`.toLowerCase();
+    if (shouldRecover(message)) recoverTransport(message);
+  });
+
+  // Lightweight periodic health check to heal stale/dead worker ports automatically.
+  setInterval(async () => {
+    if (!lastTransportSelection || recoveringTransport) return;
+    try {
+      const connection = new BareMux.BareMuxConnection(lastTransportSelection.workerPath);
+      await verifyTransport(connection);
+    } catch (e) {
+      recoverTransport(`periodic-check: ${e?.message || e}`);
+    }
+  }, hostedOnHf ? 10000 : 15000);
+}
+
+installAutoRecoveryHooks();
 window.proxyReady = initialize();

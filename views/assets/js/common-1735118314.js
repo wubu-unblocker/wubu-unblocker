@@ -793,11 +793,9 @@ const preparePage = async () => {
       (await callAfterWorkers(
         [
           '{{route}}{{/scram/scramjet.sw.js}}',
-          '{{route}}{{/uv/sw.js}}',
-          '{{route}}{{/uv/sw-blacklist.js}}',
         ],
         loadFrame,
-        2,
+        1,
         3
       )) || loadFrame();
     else loadFrame();

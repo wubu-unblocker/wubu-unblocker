@@ -8,11 +8,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link id="browser-favicon" rel="shortcut icon" href="/favicon.ico">
 
-  <!-- Scramjet is currently disabled by default due to frequent IndexedDB/schema breakage that slows the app.
-       UV + BareMux is the primary path. -->
+  <!-- Scramjet is the primary normal proxy engine. -->
   <script src="{{route}}{{/baremux/index.js}}" defer data-module></script>
-  <script src="{{route}}{{/uv/networking.bundle.js}}" defer data-module></script>
-  <script src="{{route}}{{/uv/networking.config.js}}" defer data-module></script>
+  <script src="{{route}}{{/scram/scramjet.bundle.js}}" defer data-module></script>
   <script src="{{route}}{{/assets/js/register-sw.js}}" defer></script>
   <script src="{{route}}{{assets/js/common.js}}" defer></script>
 
@@ -284,6 +282,46 @@
       } catch { }
 
       return 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
+    }
+
+    function unwrapScramjetProxyUrl(proxyUrl) {
+      try {
+        const sjPrefix = '/worker/network/';
+        let text = String(proxyUrl || '');
+        const idx = text.lastIndexOf(sjPrefix);
+        if (idx === -1) return null;
+
+        text = text.slice(idx + sjPrefix.length);
+        // Undo nested URI encoding a few times.
+        for (let i = 0; i < 3; i++) {
+          try {
+            const next = decodeURIComponent(text);
+            if (next === text) break;
+            text = next;
+          } catch {
+            break;
+          }
+        }
+
+        if (/^https?:\/\//i.test(text)) return text;
+        if (/^https?:/i.test(text)) return text.replace(/^https?:/, (m) => m + '//');
+        return null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function normalizeCachedProxyUrl(cacheValue) {
+      const raw = decodeURIComponent(String(cacheValue || ''));
+      // If this is a Scramjet URL, normalize it to exactly one proxy encoding pass.
+      if (raw.includes('/worker/network/')) {
+        const original = unwrapScramjetProxyUrl(raw);
+        if (original) {
+          const prox = await getProxyUrlAsync(processUrl(original), { forceEngine: 'ultraviolet' });
+          return prox.url;
+        }
+      }
+      return raw;
     }
 
     function decodeUvServiceUrl(href) {
@@ -836,32 +874,7 @@
       const cache = params.get('cache');
 
       if (cache) {
-        let proxyUrl = decodeURIComponent(cache);
-
-        // --- CONVERT SCRAMJET URLS TO UV ---
-        // Scramjet URLs usually look like /worker/network/...
-        // We want to force UV because Scramjet is currently unstable on this environment
-        const sjPrefix = '/worker/network/';
-        if (proxyUrl.includes(sjPrefix)) {
-          console.log("Detercted Scramjet URL, converting to Ultraviolet for stability...");
-          try {
-            // Extract the original destination
-            let originalUrl = "";
-            if (proxyUrl.includes(sjPrefix + 'https/')) {
-              originalUrl = 'https://' + proxyUrl.split(sjPrefix + 'https/')[1];
-            } else if (proxyUrl.includes(sjPrefix + 'http/')) {
-              originalUrl = 'http://' + proxyUrl.split(sjPrefix + 'http/')[1];
-            }
-
-            if (originalUrl && window.__uv$config) {
-              proxyUrl = window.__uv$config.prefix + window.__uv$config.encodeUrl(originalUrl);
-              console.log("Converted to UV:", proxyUrl);
-            }
-          } catch (e) {
-            console.warn("Failed to convert SJ URL, loading anyway", e);
-          }
-        }
-        // -----------------------------------
+        const proxyUrl = await normalizeCachedProxyUrl(cache);
 
         createTab('');
         const t = tabs[0];

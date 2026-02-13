@@ -11,8 +11,8 @@
   "scripts": {
     "fresh-install": "npm cache verify && npm update && npm ci && cd lib/rammerhead && npm ci",
     "fresh-start": "npm run fresh-install && npm start",
-    "start": "node --max-old-space-size=12288 src/server.mjs",
-    "dev": "node --max-old-space-size=12288 src/server.mjs",
+    "start": "node src/server.mjs",
+    "dev": "node src/server.mjs",
     "restart": "node run-command.mjs stop start",
     "stop": "node run-command.mjs stop",
     "test": "npm run proxy-validator",

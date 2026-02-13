@@ -12,8 +12,6 @@
   <!-- Scramjet bundle is kept for compatibility with preset buttons and legacy handlers.
        Scramjet SW is disabled by default in register-sw.js unless EnableScramjet=true. -->
   <script src="{{route}}{{scram/scramjet.bundle.js}}{{inline}}" defer></script>
-  <script src="{{route}}{{uv/networking.bundle.js}}{{inline}}" defer></script>
-  <script src="{{route}}{{uv/networking.config.js}}{{inline}}" defer></script>
   <script src="{{route}}{{assets/js/register-sw.js}}{{inline}}" defer></script>
   <script src="{{route}}{{assets/js/common.js}}{{inline}}" defer></script>
   }}
@@ -113,6 +111,9 @@
           const controller = new ScramjetController({
             prefix: '/worker/network/'
           });
+          if (typeof controller.init === 'function') {
+            try { await controller.init(); } catch { }
+          }
           const encoded = controller.encodeUrl(target);
           window.location.href = '/s?cache=' + encodeURIComponent(encoded);
           return;

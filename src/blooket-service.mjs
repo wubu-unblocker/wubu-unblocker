@@ -10,17 +10,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.join(__dirname, '..');
 const DATA_DIR = path.join(ROOT_DIR, 'blooket-data');
+let dataDirOk = true;
 
 // Ensure data directories exist
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (e) {
+    // Some hosts mount the repo read-only; fall back to a temp dir.
+    // Puppeteer profile data is optional for basic operation.
+    console.warn('[Blooket] Failed to create data dir, falling back to OS temp:', e?.message || e);
+    dataDirOk = false;
+}
 
 puppeteer.use(StealthPlugin());
 
 // --- CONSTANTS ---
-const VIEWPORT_WIDTH = 1920; // Increased to 1080p
-const VIEWPORT_HEIGHT = 1080;
-const FRAME_THROTTLE_MS = 16; // ~60 FPS target
-const MAX_SESSIONS = 30; // Optimized for 16GB RAM
+// Defaults are intentionally conservative for hosted environments.
+// Override via env if you have the CPU/RAM locally.
+const VIEWPORT_WIDTH = Math.max(320, Number(process.env.BLOOKET_VIEWPORT_WIDTH || 1280) || 1280);
+const VIEWPORT_HEIGHT = Math.max(240, Number(process.env.BLOOKET_VIEWPORT_HEIGHT || 720) || 720);
+const FRAME_THROTTLE_MS = Math.max(0, Number(process.env.BLOOKET_FRAME_THROTTLE_MS || 33) || 33); // ~30 FPS
+const MAX_SESSIONS = Math.max(1, Number(process.env.BLOOKET_MAX_SESSIONS || 4) || 4);
+const JPEG_QUALITY = Math.min(100, Math.max(1, Number(process.env.BLOOKET_JPEG_QUALITY || 40) || 40));
 
 let browser = null;
 let browserStartingPromise = null;
@@ -46,7 +57,9 @@ function getChromeExecutablePath() {
     }
 }
 const CHROME_EXECUTABLE_PATH = getChromeExecutablePath();
-const USER_DATA_DIR = path.join(DATA_DIR, 'chrome-profile');
+const USER_DATA_DIR = dataDirOk
+    ? path.join(DATA_DIR, 'chrome-profile')
+    : path.join(os.tmpdir(), 'wubu-blooket-profile');
 
 class ClientSession {
     constructor(ws) {
@@ -54,7 +67,7 @@ class ClientSession {
         this.context = null;
         this.page = null;
         this.cdp = null;
-        this.quality = 50; // Lowered quality for performance
+        this.quality = JPEG_QUALITY;
         this.lastFrameTime = 0;
         this.isReady = false;
 

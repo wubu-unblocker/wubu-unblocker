@@ -56,5 +56,6 @@ RUN cd lib/rammerhead && npm prune --omit=dev
 ENV PORT=7860
 EXPOSE 7860 9050 9051
 
-# Start the server directly
-CMD ["/bin/sh", "-c", "tor & exec node src/server.mjs"]
+# Start the server directly.
+# Tor is expensive and not required for normal UV/Scramjet usage; only enable when needed.
+CMD ["/bin/sh", "-c", "if [ \"${ENABLE_TOR}\" = \"true\" ]; then tor & fi; exec node src/server.mjs"]

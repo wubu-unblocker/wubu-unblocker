@@ -28,6 +28,8 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  */
 console.log('Server URL:', serverUrl);
 
+const WS_DEBUG = String(process.env.WUBU_WS_DEBUG || '').toLowerCase() === 'true';
+
 // Wisp Configuration: Refer to the documentation at https://www.npmjs.com/package/@mercuryworkshop/wisp-js
 logging.set_level(logging.NONE);
 wisp.options.allow_udp_streams = false;
@@ -115,8 +117,17 @@ const rammerheadSession = new RegExp(
 // Initialize Blooket Service (Puppeteer-based streaming for Blooket)
 const { wss: blooketWss, startBrowser: startBlooketBrowser } = setupBlooketService();
 
-// Start the browser immediately
-startBlooketBrowser().catch((err) => console.error('Failed to start Blooket Browser:', err));
+// Puppeteer/Chromium startup is expensive on small hosts (HF Spaces) and can cause large
+// latency spikes for all requests if we pre-warm at boot. Default to lazy-start on the
+// first Blooket websocket connection. Opt-in prewarm via env.
+if (String(process.env.BLOOKET_PREWARM || '').toLowerCase() === 'true') {
+  // Defer a bit so the HTTP server can come up first.
+  setTimeout(() => {
+    startBlooketBrowser().catch((err) =>
+      console.error('Failed to prewarm Blooket Browser:', err)
+    );
+  }, 1500);
+}
 
 // Create a server factory for Rammerhead, Wisp, and Blooket
 const serverFactory = (handler) => {
@@ -129,12 +140,15 @@ const serverFactory = (handler) => {
       else handler(req, res);
     })
     .on('upgrade', (req, socket, head) => {
-      console.log('[WebSocket Upgrade] Incoming URL:', req.url);
+      // Avoid console logging here by default: UV/Scramjet/BareMux can open lots of
+      // websocket connections and stdout logging will absolutely crush throughput
+      // on hosted platforms.
+      if (WS_DEBUG) console.log('[WebSocket Upgrade] Incoming URL:', req.url);
 
       // Blooket WebSocket - Use the streaming proxy for Blooket
       const blooketWsPath = serverUrl.pathname + 'blooket-ws';
       if (req.url === blooketWsPath || req.url === '/blooket-ws') {
-        console.log('[WebSocket] Routing to Blooket service');
+        if (WS_DEBUG) console.log('[WebSocket] Routing to Blooket service');
         blooketWss.handleUpgrade(req, socket, head, (ws) => {
           blooketWss.emit('connection', ws, req);
         });
@@ -149,14 +163,20 @@ const serverFactory = (handler) => {
 
       // Wisp WebSocket - for BareMux proxy connections
       const wispPath = getAltPrefix('wisp', serverUrl.pathname); // /cron/
-      if (req.url.startsWith(wispPath) || req.url === '/cron/' || req.url.startsWith('/cron')) {
-        console.log('[WebSocket] Routing to Wisp service');
+      if (
+        req.url.startsWith(wispPath) ||
+        req.url === '/cron/' ||
+        req.url.startsWith('/cron') ||
+        req.url === '/wisp/' ||
+        req.url.startsWith('/wisp')
+      ) {
+        if (WS_DEBUG) console.log('[WebSocket] Routing to Wisp service');
         wisp.routeRequest(req, socket, head);
         return;
       }
 
       // Unknown WebSocket - close connection
-      console.log('[WebSocket] Unknown upgrade path:', req.url);
+      if (WS_DEBUG) console.log('[WebSocket] Unknown upgrade path:', req.url);
       socket.destroy();
     });
 };
@@ -211,6 +231,13 @@ app.register(multipart, {
       const p = String(pathName || '').toLowerCase();
       if (p.endsWith('sw.js') || p.endsWith('sw-blacklist.js')) {
         res.setHeader('Cache-Control', 'no-store, max-age=0');
+        return;
+      }
+
+      // BareMux client/worker scripts should not be immutable cached.
+      // Mismatched versions can produce "port is dead" / ping timeout loops.
+      if (prefix === 'baremux' && (p.endsWith('/index.js') || p.endsWith('/worker.js'))) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
       }
     },
   });
@@ -223,6 +250,13 @@ app.register(fastifyStatic, {
   decorateReply: false,
   maxAge: '1h',
   cacheControl: true,
+  setHeaders: (res, pathName) => {
+    const p = String(pathName || '').toLowerCase();
+    // Always serve latest proxy bootstrap script to prevent stale init logic.
+    if (p.endsWith('/assets/js/register-sw.js')) {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+    }
+  },
 });
 
 // ========================
@@ -769,9 +803,8 @@ if (serverUrl.pathname === '/') {
 
 // Stuff Route - Serve custom Wubu hub page
 app.get(serverUrl.pathname + 'stuff', (req, reply) => {
-  const pagePath = join(__dirname, '../views/stuff.html');
   try {
-    const content = readFileSync(pagePath, 'utf-8');
+    const content = tryReadFile('../views/stuff.html', import.meta.url, false);
     reply.type('text/html').send(content);
   } catch (e) {
     reply.code(404).send('Stuff page not found');
@@ -804,9 +837,8 @@ app.get(serverUrl.pathname + 'blooket-loader', (req, reply) => {
 
 // Blooket Page Route - Uses Puppeteer streaming proxy for Blooket
 app.get(serverUrl.pathname + 'blooket', (req, reply) => {
-  const pagePath = join(__dirname, '../views/pages/blooket.html');
   try {
-    const content = readFileSync(pagePath, 'utf-8');
+    const content = tryReadFile('../views/pages/blooket.html', import.meta.url, false);
     reply.type('text/html').send(content);
   } catch (e) {
     reply.code(404).send('Blooket Page Not Found');
@@ -815,14 +847,12 @@ app.get(serverUrl.pathname + 'blooket', (req, reply) => {
 
 // Games Route - Serve the Games library
 app.get(serverUrl.pathname + 'games', (req, reply) => {
-  // Try dist first, then source
-  let pagePath = join(__dirname, '../views/dist/pages/games.html');
-  if (!existsSync(pagePath)) {
-    pagePath = join(__dirname, '../views/pages/games.html');
-  }
-
   try {
-    const content = readFileSync(pagePath, 'utf-8');
+    // Try dist first, then source.
+    let content = tryReadFile('../views/dist/pages/games.html', import.meta.url, false);
+    if (content === preloaded404) {
+      content = tryReadFile('../views/pages/games.html', import.meta.url, false);
+    }
     reply.type('text/html').send(content);
   } catch (e) {
     console.error('Failed to load games page:', e);
@@ -968,6 +998,15 @@ if (serverUrl.pathname === '/') {
     'json',
     'wasm',
     'map',
+    // Game / app payloads often use these and may request them as root-relative assets.
+    'txt',
+    'csv',
+    'tsv',
+    'dat',
+    'bin',
+    'pak',
+    'zip',
+    'unityweb',
     'png',
     'jpg',
     'jpeg',
@@ -975,9 +1014,21 @@ if (serverUrl.pathname === '/') {
     'svg',
     'webp',
     'ico',
+    'mp3',
+    'wav',
+    'ogg',
+    'm4a',
+    'aac',
+    'mp4',
+    'webm',
+    'm3u8',
+    'mpd',
+    'vtt',
+    'srt',
     'woff',
     'woff2',
     'ttf',
+    'ttc',
     'otf',
     'eot',
   ]);
@@ -1033,7 +1084,13 @@ if (serverUrl.pathname === '/') {
 // START SERVER
 // ========================
 
-app.listen({ port: serverUrl.port, host: serverUrl.hostname });
+try {
+  await app.listen({ port: serverUrl.port, host: serverUrl.hostname });
+} catch (err) {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+}
+
 console.log(`Wubu Unblocker is listening on port ${serverUrl.port}.`);
 console.log(`
 =================================================

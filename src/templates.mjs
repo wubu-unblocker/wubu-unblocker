@@ -49,6 +49,12 @@ const __dirname = '../views/pages/misc/deobf',
       ).arrayBuffer()
     )
     : preformatted404,
+  // Disk IO on small hosted environments is noticeably slower than local.
+  // Cache static file reads in-memory for production to reduce latency.
+  cacheEnabled =
+    String(process.env.WUBU_DISABLE_FILE_CACHE || '').toLowerCase() !== 'true' &&
+    (process.env.NODE_ENV === 'production' || !!config.production),
+  fileCache = new Map(),
   // Grab the text content of a file. Use the root directory if no base is supplied.
   tryReadFile = (
     file,
@@ -56,7 +62,15 @@ const __dirname = '../views/pages/misc/deobf',
     isBuffer = config.disguiseFiles
   ) => {
     file = new URL(file, baseUrl);
-    return existsSync(file)
+
+    // Key includes whether we're returning a Buffer or utf8 string.
+    const cacheKey = cacheEnabled ? `${file.href}|${isBuffer ? 'b' : 't'}` : null;
+    if (cacheEnabled && fileCache.has(cacheKey)) return fileCache.get(cacheKey);
+
+    const data = existsSync(file)
       ? readFileSync(file, isImage.test(file) || isBuffer ? undefined : 'utf8')
       : preloaded404;
+
+    if (cacheEnabled && data !== preloaded404) fileCache.set(cacheKey, data);
+    return data;
   };
