@@ -46,8 +46,8 @@ RUN find . -name "*.sh" -type f -exec dos2unix {} \; 2>/dev/null || true
 
 # Install deps + build (requires dev deps like esbuild), then prune to reduce image size.
 # Note: lib/rammerhead is a nested package with its own dependencies used during build.
-RUN npm install
-RUN cd lib/rammerhead && npm install
+RUN rm -f package-lock.json && npm install
+RUN cd lib/rammerhead && rm -f package-lock.json && npm install
 RUN npm run build
 RUN npm prune --omit=dev
 RUN cd lib/rammerhead && npm prune --omit=dev
