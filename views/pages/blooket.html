@@ -10,16 +10,7 @@
     <link rel="stylesheet" href="assets/css/wubu.css">
     <style>
         /* Override specific Blooket page layouts while keeping dashboard theme */
-        body {
-            flex-direction: column;
-            overflow: hidden;
-            font-family: 'Outfit', sans-serif;
-            background: #0f1219;
-            color: #fff;
-            margin: 0;
-            display: flex;
-            height: 100vh;
-        }
+        body { flex-direction: column; overflow: hidden; display: flex; height: 100vh; margin: 0; background: var(--bg); color: var(--text-main); }
 
         .header {
             height: 60px;
@@ -126,28 +117,211 @@
             display: none !important;
         }
     </style>
+<script>try{if(localStorage.getItem('wubu-theme')==='dark'){document.documentElement.setAttribute('data-theme', 'dark')}}catch(e){}</script>
+    <link rel="stylesheet" href="/assets/css/wubu.css?v=2">
 </head>
 
 <body>
-    <div class="header">
-        <a href="/" class="action-btn"><i class="fas fa-arrow-left"></i> <span>Home</span></a>
-        <div style="font-weight:bold; font-size:1.1rem; white-space:nowrap;">Blooket Proxy</div>
-
-        <div class="url-bar">
-            <input type="text" id="urlInput" value="https://play.blooket.com/" placeholder="Enter URL...">
+        <nav class="nav">
+        <a href="/home" class="nav-brand">
+            <i class="fas fa-ghost" style="margin-right: 8px;"></i>Wubu
+        </a>
+        <div class="nav-links">
+            <a href="/home">Home</a>
+            <a href="/games">Games</a>
+            <a href="/browsing">Proxies</a>
         </div>
-        <button class="action-btn" onclick="navigate()"><i class="fas fa-play"></i> <span>Go</span></button>
+        
+        <!-- Blooket Specific Actions -->
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <div class="url-bar" style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; display: flex; align-items: center; width: 200px;">
+                <input type="text" id="urlInput" value="https://play.blooket.com/" placeholder="Enter URL..." style="border: none; background: transparent; outline: none; color: var(--text-main); font-family: inherit; width: 100%; font-size:14px;">
+            </div>
+            <button class="nav-icon" onclick="navigate()" title="Go" style="width: 36px; height: 36px;"><i class="fas fa-play" style="font-size: 13px;"></i></button>
+            <button class="nav-icon" onclick="showPasteModal()" title="Paste" style="width: 36px; height: 36px;"><i class="fas fa-paste" style="font-size: 14px;"></i></button>
+            <button class="nav-icon" onclick="injectCheats()" title="Cheats" style="width: 36px; height: 36px; background: var(--accent); color: white;"><i class="fas fa-magic" style="font-size: 14px;"></i></button>
+            <button class="nav-icon" onclick="toggleGUI()" title="GUI" style="width: 36px; height: 36px;"><i class="fas fa-eye" style="font-size: 14px;"></i></button>
+            <button class="nav-icon" onclick="toggleFullscreen()" title="Fullscreen" style="width: 36px; height: 36px;"><i class="fas fa-expand" style="font-size: 14px;"></i></button>
+        </div>
 
-        <div style="flex:1"></div>
+        <div class="nav-actions">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80" width="60" height="30" id="themeToggle" style="cursor: pointer; align-self: center;">
+  <defs>
+    <!-- The Requested Magenta Gradient -->
+    <linearGradient id="wubu-grad" x1="0" y1="0" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9d4edd" />
+      <stop offset="100%" stop-color="#7b2cbf" />
+    </linearGradient>
 
-        <button class="action-btn" onclick="showPasteModal()"><i class="fas fa-paste"></i> <span>Paste</span></button>
-        <button class="action-btn primary" onclick="injectCheats()"><i class="fas fa-magic"></i>
-            <span>Cheats</span></button>
-        <button class="action-btn" onclick="toggleGUI()"><i class="fas fa-eye"></i> <span>GUI</span></button>
-        <button class="action-btn" onclick="toggleFullscreen()"><i class="fas fa-expand"></i></button>
-    </div>
+    <!-- Proxy Node Ray (Used for the Sun) -->
+    <g id="proxy-node">
+      <line x1="40" y1="23" x2="40" y2="13" stroke="url(#wubu-grad)" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="40" cy="11" r="3.5" fill="url(#wubu-grad)"/>
+    </g>
 
-    <div class="stream-container" id="streamContainer" tabindex="0">
+    <!-- 4-Point Sparkle Star -->
+    <path id="sparkle-star" d="M 0 -6 Q 0 0 6 0 Q 0 0 0 6 Q 0 0 -6 0 Q 0 0 0 -6 Z" fill="#ffffff" />
+
+    <!-- Mask to morph Sun Core into Moon -->
+    <mask id="moon-mask">
+      <circle cx="40" cy="40" r="16" fill="white" />
+      <circle id="moon-cutout" cx="40" cy="40" r="16" fill="black" />
+    </mask>
+  </defs>
+
+  <style>
+    /* Base Styles */
+    .track {
+      fill: #e4e6eb;
+      transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .light-bg {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .light-bg path, .light-bg line {
+      stroke: #c2c7d0;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .dark-bg {
+      opacity: 0;
+      transform: translateY(15px) scale(0.9);
+      transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .knob-group {
+      transform: translateX(0);
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .knob-base {
+      fill: #ffffff;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+    }
+
+    .icon-rotator {
+      transform-origin: 40px 40px;
+      transform: rotate(0deg);
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .node-rays {
+      opacity: 1;
+      transition: opacity 0.4s ease 0.1s;
+    }
+
+    .core-icon {
+      fill: url(#wubu-grad);
+      transition: fill 0.6s ease;
+    }
+
+    #moon-cutout {
+      transform: translate(0, -40px);
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* --- TOGGLED STATE (DARK MODE) --- */
+    .dark-mode .track {
+      fill: url(#wubu-grad);
+    }
+
+    .dark-mode .light-bg {
+      opacity: 0;
+      transform: translateY(-15px) scale(0.9);
+    }
+
+    .dark-mode .dark-bg {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .dark-mode .knob-group {
+      transform: translateX(80px);
+    }
+
+    .dark-mode .icon-rotator {
+      transform: rotate(180deg);
+    }
+
+    .dark-mode .node-rays {
+      opacity: 0;
+      transition-delay: 0s;
+    }
+
+    .dark-mode .core-icon {
+      fill: #0f0f13; /* Inner moon matches dark background */
+    }
+
+    .dark-mode #moon-cutout {
+      transform: translate(-8px, -8px);
+    }
+  </style>
+
+  <!-- 1. Background Track -->
+  <rect class="track" width="160" height="80" rx="40" />
+
+  <!-- 2. Light Mode Proxy Web Background -->
+  <g class="light-bg">
+    <path d="M 85 20 Q 115 40 145 20" fill="none" />
+    <path d="M 85 60 Q 115 40 145 60" fill="none" />
+    <line x1="115" y1="25" x2="115" y2="55" />
+    <circle cx="85" cy="20" r="2.5" fill="#c2c7d0"/>
+    <circle cx="145" cy="20" r="2.5" fill="#c2c7d0"/>
+    <circle cx="115" cy="40" r="3.5" fill="#c2c7d0"/>
+    <circle cx="85" cy="60" r="2.5" fill="#c2c7d0"/>
+    <circle cx="145" cy="60" r="2.5" fill="#c2c7d0"/>
+  </g>
+
+  <!-- 3. Dark Mode "Wubu" Constellation Background -->
+  <g class="dark-bg">
+    <path d="M 20 30 L 35 55 L 50 35 L 65 55 L 80 30" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-dasharray="3 3" />
+    <use href="#sparkle-star" x="20" y="30" transform="scale(0.8) translate(5, 7.5)" />
+    <use href="#sparkle-star" x="35" y="55" />
+    <use href="#sparkle-star" x="50" y="35" transform="scale(0.6) translate(33, 23)" />
+    <use href="#sparkle-star" x="65" y="55" />
+    <use href="#sparkle-star" x="80" y="30" transform="scale(1.2) translate(-13, -5)" />
+  </g>
+
+  <!-- 4. Sliding Knob -->
+  <g class="knob-group">
+    <circle class="knob-base" cx="40" cy="40" r="34" />
+    
+    <g class="icon-rotator">
+      <g class="node-rays">
+        <use href="#proxy-node" />
+        <use href="#proxy-node" transform="rotate(45 40 40)" />
+        <use href="#proxy-node" transform="rotate(90 40 40)" />
+        <use href="#proxy-node" transform="rotate(135 40 40)" />
+        <use href="#proxy-node" transform="rotate(180 40 40)" />
+        <use href="#proxy-node" transform="rotate(225 40 40)" />
+        <use href="#proxy-node" transform="rotate(270 40 40)" />
+        <use href="#proxy-node" transform="rotate(315 40 40)" />
+      </g>
+      <circle class="core-icon" cx="40" cy="40" r="16" mask="url(#moon-mask)" />
+    </g>
+  </g>
+</svg>
+            <div class="dropdown" style="position: relative; display: inline-block;">
+                <button class="nav-icon" id="moreDocsBtn" title="More">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div id="moreDropdown" class="dropdown-content" style="display: none; position: absolute; right: 0; background: var(--nav-bg); min-width: 160px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); border-radius: 12px; border: 1px solid var(--border); padding: 8px; z-index: 100;">
+                    <a href="/blooket" class="active" style="display: block; padding: 12px 15px; text-decoration: none; color: var(--text-main); border-radius: 8px; margin-bottom: 4px; transition: background 0.2s;"><i class="fas fa-bolt" style="width: 20px; text-align: center; margin-right: 8px; color: var(--text-secondary);"></i>Blooket</a>
+                    <a href="/docs" style="display: block; padding: 12px 15px; text-decoration: none; color: var(--text-main); border-radius: 8px; margin-bottom: 4px; transition: background 0.2s;"><i class="fas fa-book" style="width: 20px; text-align: center; margin-right: 8px; color: var(--text-secondary);"></i>Docs</a>
+                    <a href="/issues" style="display: block; padding: 12px 15px; text-decoration: none; color: var(--text-main); border-radius: 8px; transition: background 0.2s;"><i class="fas fa-bug" style="width: 20px; text-align: center; margin-right: 8px; color: var(--text-secondary);"></i>Issues</a>
+                </div>
+            </div>
+            <button class="nav-icon" id="settingsBtn" title="Settings">
+              <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </nav>
+    <div class="stream-container" id="streamContainer" tabindex="0" style="background:var(--bg)">
         <div class="status-overlay" id="status">
             <h3>Connecting...</h3>
             <p>Starting remote browser...</p>
@@ -210,9 +384,9 @@
         function getkCoords(e) {
             const rect = stream.getBoundingClientRect();
 
-            // Hardcoded viewport size from server
-            const naturalWidth = 1920;
-            const naturalHeight = 1080;
+            // Use actual streamed dimensions
+            const naturalWidth = stream.naturalWidth || 1280;
+            const naturalHeight = stream.naturalHeight || 720;
 
             const elementWidth = rect.width;
             const elementHeight = rect.height;
@@ -292,6 +466,62 @@
 
         connect();
     </script>
+
+    
+    
+
+<script>
+    if(!window.wubuThemeSetup) {
+        window.wubuThemeSetup = true;
+        const root = document.documentElement;
+        
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                root.setAttribute('data-theme', 'dark');
+            } else {
+                root.removeAttribute('data-theme');
+            }
+            localStorage.setItem('wubu-theme', theme);
+            
+            // Update all toggle buttons on page
+            document.querySelectorAll('#themeToggle').forEach(btn => {
+                btn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            });
+        }
+        
+        const currentTheme = localStorage.getItem('wubu-theme') || 'light';
+        applyTheme(currentTheme);
+        
+        // Listeners for all theme buttons
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#themeToggle');
+            if(btn) {
+                const isDark = root.hasAttribute('data-theme');
+                applyTheme(isDark ? 'light' : 'dark');
+            }
+        });
+
+        // Dropdown toggle globally
+        document.addEventListener('click', (e) => {
+            const moreBtn = e.target.closest('#moreDocsBtn');
+            const dropdown = document.getElementById('moreDropdown');
+            if(moreBtn && dropdown) {
+                e.preventDefault();
+                e.stopPropagation();
+                if(dropdown.style.display === 'block') {
+                    dropdown.style.opacity = '0';
+                    setTimeout(() => dropdown.style.display = 'none', 200);
+                } else {
+                    dropdown.style.display = 'block';
+                    dropdown.style.opacity = '1';
+                }
+            } else if(dropdown && dropdown.style.display === 'block' && !e.target.closest('#moreDropdown')) {
+                dropdown.style.opacity = '0';
+                setTimeout(() => dropdown.style.display = 'none', 200);
+            }
+        });
+    }
+</script>
 </body>
 
 </html>

@@ -269,11 +269,14 @@
 
     // Quick reset button (optional).
     attachEventListener('cloak-reset', 'click', () => {
-      if (!confirm('Reset tab title and icon?')) return;
       removeStorage('Title');
       removeStorage('Icon');
       pageTitle(defaultTitle);
       pageIcon(defaultIconHref);
+      let t = document.getElementById('titleform');
+      if (t) t.firstElementChild.value = '';
+      let i = document.getElementById('iconform');
+      if (i) i.firstElementChild.value = '';
     });
 
     attachClassEventListener('search-engine-list', 'change', (e) => {

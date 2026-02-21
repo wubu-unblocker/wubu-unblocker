@@ -2,32 +2,32 @@
 
   <div class="settings-content-body">
     <div class="csel-container-left">
-      <p class="cseltitle">{{mask}}{{Tab Appearance}}</p>
+      <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">{{mask}}{{Tab Appearance}}</p>
       <p style="margin: 0 0 10px; color: var(--text-secondary);">
         Change your tab title and icon.
       </p>
 
       <div class="cloakform" style="flex-direction: column; align-items: stretch;">
         <div style="display:flex; gap:10px; flex-wrap: wrap;">
-          <input type="button" id="cloak-clever" value="Set To Clever" />
-          <input type="button" id="cloak-reset" value="Reset" />
+          <input type="button" id="cloak-clever" value="Set To Clever" style="padding: 10px 18px; border-radius: 10px; background: var(--surface); color: var(--text-main); border: 1px solid var(--border); font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"/>
+          <input type="button" id="cloak-reset" value="Reset" style="padding: 10px 18px; border-radius: 10px; background: var(--surface); color: var(--text-main); border: 1px solid var(--border); font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"/>
         </div>
       </div>
 
-      <p class="cseltitle">{{mask}}{{Custom Title}}</p>
-      <form id="titleform" class="cloakform">
-        <input type="text" placeholder="Enter a tab title..." spellcheck="false" />
-        <input type="submit" value="Apply" />
+      <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">{{mask}}{{Custom Title}}</p>
+      <form id="titleform" class="cloakform" style="display:flex; gap:10px;">
+        <input type="text" placeholder="Enter a tab title..." spellcheck="false" style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-main); font-family: inherit; font-size: 0.95rem; outline: none; transition: border 0.3s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+        <input type="submit" value="Apply" style="padding: 10px 18px; border-radius: 10px; background: var(--accent); color: white; border: none; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--accent-hover)'" onmouseout="this.style.background='var(--accent)'" />
       </form>
 
-      <p class="cseltitle">{{mask}}{{Custom Icon URL}}</p>
-      <form id="iconform" class="cloakform">
-        <input type="text" placeholder="Enter an icon URL..." spellcheck="false" />
-        <input type="submit" value="Apply" />
+      <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">{{mask}}{{Custom Icon URL}}</p>
+      <form id="iconform" class="cloakform" style="display:flex; gap:10px; margin-bottom: 24px;">
+        <input type="text" placeholder="Enter an icon URL..." spellcheck="false" style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-main); font-family: inherit; font-size: 0.95rem; outline: none; transition: border 0.3s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+        <input type="submit" value="Apply" style="padding: 10px 18px; border-radius: 10px; background: var(--accent); color: white; border: none; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--accent-hover)'" onmouseout="this.style.background='var(--accent)'" />
       </form>
 
-      <p class="cseltitle">{{mask}}{{Preset Icons}}</p>
-      <select id="icon-list">
+      <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">{{mask}}{{Preset Icons}}</p>
+      <select id="icon-list" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-main); font-family: inherit; font-size: 0.95rem; outline: none; margin-bottom: 12px; cursor: pointer;">
         <option><!-- Leave this blank to avoid a bug. --></option>
         <option>Clever</option>
         <option>{{Google}}</option>
@@ -38,23 +38,23 @@
 
       <a href="{{route}}{{/questions}}">{{mask}}{{Find Icon URL}}</a>
 
-      <details style="margin-top: 14px;">
-        <summary style="cursor:pointer; font-weight:700;">Advanced</summary>
+      <details style="margin-top: 24px;">
+        <summary style="cursor:pointer; font-weight:700; background: var(--surface); padding: 16px 20px; border-radius: 12px; border: 1px solid var(--border); transition: all 0.2s; display:flex; justify-content:space-between; align-items:center; font-size:1.05rem;" onmouseover="this.style.borderColor='var(--accent)'; this.style.boxShadow='0 4px 12px rgba(138, 43, 226, 0.1)'" onmouseout="this.style.borderColor='var(--border)'; this.style.boxShadow='none'">Advanced <i class="fas fa-chevron-down" style="font-size: 0.9rem; color: var(--text-secondary);"></i></summary>
         <div style="margin-top: 12px;">
-          <p class="cseltitle">{{mask}}{{Wisp Protocol Transport}}</p>
+          <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">{{mask}}{{Wisp Protocol Transport}}</p>
           <div class="radio-group {{wisp-transport}}-list">
             <label>
-              <p>{{mask}}{{Libcurl}}</p>
+              {{mask}}{{Libcurl}}
               <input type="radio" name="{{wisp-transport}}" value="{{libcurl}}" checked />
             </label>
             <label>
-              <p>{{mask}}{{Epoxy}}</p>
+              {{mask}}{{Epoxy}}
               <input type="radio" name="{{wisp-transport}}" value="{{epoxy}}" />
             </label>
           </div>
 
-          <p class="cseltitle">Search Engine</p>
-          <select class="search-engine-list">
+          <p class="cseltitle" style="font-weight: 700; color: var(--text-main); margin-bottom: 8px; margin-top: 16px; font-size: 1.05rem;">Search Engine</p>
+          <select class="search-engine-list" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-main); font-family: inherit; font-size: 0.95rem; outline: none; margin-bottom: 12px; cursor: pointer;">
             <option>{{DuckDuckGo}}</option>
             <option>{{Google}}</option>
             <option>{{Bing}}</option>
@@ -62,33 +62,21 @@
             <option>{{Startpage}}</option>
           </select>
 
-          <p class="cseltitle">Theme</p>
-          <div class="radio-group theme-list">
-            <label>
-              <p>Light</p>
-              <input type="radio" name="theme" value="light" />
-            </label>
-            <label>
-              <p>Dark</p>
-              <input type="radio" name="theme" value="dark" checked />
-            </label>
-          </div>
-
           <div class="radio-group" style="margin-top: 10px;">
             <label>
-              <p>Hide Ads</p>
+              Hide Ads
               <input type="checkbox" class="switch hideads" checked />
             </label>
             <label>
-              <p>{{mask}}{{Enable Tor}}</p>
+              {{mask}}{{Enable Tor}}
               <input type="checkbox" class="switch useonion" />
             </label>
             <label>
-              <p>Enable Autocomplete</p>
+              Enable Autocomplete
               <input type="checkbox" class="switch useac" checked />
             </label>
             <label>
-              <p>Public Wisp Fallback</p>
+              Public Wisp Fallback
               <input type="checkbox" class="switch usepublicwisp" checked />
             </label>
           </div>

@@ -9,7 +9,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "fresh-install": "npm cache verify && npm update && npm ci && cd lib/rammerhead && npm ci",
+    "fresh-install": "npm cache verify && npm update && npm ci",
     "fresh-start": "npm run fresh-install && npm start",
     "start": "node src/server.mjs",
     "dev": "node src/server.mjs",
@@ -18,7 +18,7 @@
     "test": "npm run proxy-validator",
     "manual-start": "node run-command.mjs start",
     "kill": "node run-command.mjs stop kill",
-    "build": "node run-command.mjs build && cd lib/rammerhead && npm run build",
+    "build": "node run-command.mjs build",
     "clear": "node run-command.mjs clean",
     "clean": "node run-command.mjs clean format",
     "proxy-validator": "node proxyServiceValidator.js",
@@ -49,6 +49,7 @@
     "esbuild": "^0.25.12",
     "fastify": "^5.6.1",
     "firebase-admin": "^13.5.0",
+    "glob": "^13.0.6",
     "pm2": "^6.0.13",
     "puppeteer": "^24.29.1",
     "puppeteer-extra": "^3.3.6",

@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import { createServer } from 'node:http';
 import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
-import createRammerhead from '../lib/rammerhead/src/server/index.js';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
@@ -47,73 +46,6 @@ wisp.options.allow_loopback_ips = true;
 // The server will check for the existence of this file when a shutdown is requested.
 const shutdown = fileURLToPath(new URL('./.shutdown', import.meta.url));
 
-// Initialize Rammerhead
-const rh = createRammerhead();
-const rammerheadScopes = [
-  '/rammerhead.js',
-  '/hammerhead.js',
-  '/transport-worker.js',
-  '/task.js',
-  '/iframe-task.js',
-  '/worker-hammerhead.js',
-  '/messaging',
-  '/sessionexists',
-  '/deletesession',
-  '/newsession',
-  '/editsession',
-  '/needpassword',
-  '/syncLocalStorage',
-  '/api/shuffleDict',
-  '/mainport',
-  // Some Rammerhead client builds reference service routes under a "/rammer/" prefix.
-  // Support both to avoid 404/MIME issues that break sign-in and large apps (YouTube, etc).
-  '/rammer/rammerhead.js',
-  '/rammer/hammerhead.js',
-  '/rammer/transport-worker.js',
-  '/rammer/task.js',
-  '/rammer/iframe-task.js',
-  '/rammer/worker-hammerhead.js',
-  '/rammer/messaging',
-  '/rammer/sessionexists',
-  '/rammer/deletesession',
-  '/rammer/newsession',
-  '/rammer/editsession',
-  '/rammer/needpassword',
-  '/rammer/syncLocalStorage',
-  '/rammer/api/shuffleDict',
-  '/rammer/mainport',
-].map((pathname) => pathname.replace('/', serverUrl.pathname));
-
-const rammerheadSession = new RegExp(
-  `^${serverUrl.pathname.replaceAll('.', '\\.')}[a-z0-9]{32}`
-),
-  shouldRouteRh = (req) => {
-    try {
-      const url = new URL(req.url, serverUrl);
-      return (
-        rammerheadScopes.includes(url.pathname) ||
-        // Some RH resources are referenced under /rammer/...; treat as RH scope too.
-        url.pathname.startsWith(getAltPrefix('rammer', serverUrl.pathname)) ||
-        rammerheadSession.test(url.pathname)
-      );
-    } catch (e) {
-      return false;
-    }
-  },
-  routeRhRequest = (req, res) => {
-    // Strip base path and optional /rammer prefix before handing to Rammerhead.
-    req.url = req.url.slice(serverUrl.pathname.length - 1);
-    if (req.url === '/rammer') req.url = '/';
-    else if (req.url.startsWith('/rammer/')) req.url = req.url.slice('/rammer'.length);
-    rh.emit('request', req, res);
-  },
-  routeRhUpgrade = (req, socket, head) => {
-    req.url = req.url.slice(serverUrl.pathname.length - 1);
-    if (req.url === '/rammer') req.url = '/';
-    else if (req.url.startsWith('/rammer/')) req.url = req.url.slice('/rammer'.length);
-    rh.emit('upgrade', req, socket, head);
-  };
-
 // Initialize Blooket Service (Puppeteer-based streaming for Blooket)
 const { wss: blooketWss, startBrowser: startBlooketBrowser } = setupBlooketService();
 
@@ -136,8 +68,7 @@ const serverFactory = (handler) => {
   // Keep this bounded to reduce DoS risk while avoiding common breakage.
   return createServer({ maxHeaderSize: 64 * 1024 })
     .on('request', (req, res) => {
-      if (shouldRouteRh(req)) routeRhRequest(req, res);
-      else handler(req, res);
+      handler(req, res);
     })
     .on('upgrade', (req, socket, head) => {
       // Avoid console logging here by default: UV/Scramjet/BareMux can open lots of
@@ -152,12 +83,6 @@ const serverFactory = (handler) => {
         blooketWss.handleUpgrade(req, socket, head, (ws) => {
           blooketWss.emit('connection', ws, req);
         });
-        return;
-      }
-
-      // Rammerhead WebSocket
-      if (shouldRouteRh(req)) {
-        routeRhUpgrade(req, socket, head);
         return;
       }
 
@@ -198,6 +123,8 @@ const app = Fastify({
 app.register(fastifyHelmet, {
   contentSecurityPolicy: false, // Disable CSP
   xPoweredBy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
 });
 
 // Multipart for image uploads (Issues page).
@@ -749,15 +676,13 @@ if (config.disguiseFiles) {
     'wisp',
     'chii',
   ].map((dir) => getAltPrefix(dir, serverUrl.pathname).slice(1, -1)),
-    exemptPages = ['login', 'test-shutdown', 'favicon.ico', 'blooket', 'blooket-loader', 'blooket-ws', 'stuff', 'games'];
+    exemptPages = ['login', 'test-shutdown', 'favicon.ico', 'blooket', 'blooket-loader', 'blooket-ws', 'home', 'games'];
 
   // Always exempt API endpoints from the disguise/loader behavior.
   exemptDirs.push('api');
   for (const [key, value] of Object.entries(externalPages))
     if ('string' === typeof value) exemptPages.push(key);
     else exemptDirs.push(key);
-  for (const path of rammerheadScopes)
-    if (!shouldNotHandle.test(path)) exemptDirs.push(path.slice(1));
   exemptPages = exemptPages.concat(exemptDirs);
   if (pages.default === 'login') exemptPages.push('');
 
@@ -769,8 +694,7 @@ if (config.disguiseFiles) {
     if (
       shouldNotHandle.test(reqPath) ||
       exemptDirs.some((dir) => reqPath.indexOf(dir + '/') === 0) ||
-      exemptPages.includes(reqPath) ||
-      rammerheadSession.test(serverUrl.pathname + reqPath)
+      exemptPages.includes(reqPath) 
     )
       return done();
 
@@ -797,17 +721,17 @@ if (config.disguiseFiles) {
 // Root route - Redirect to /stuff
 if (serverUrl.pathname === '/') {
   app.get('/', (req, reply) => {
-    reply.redirect('/stuff');
+    reply.redirect('/home');
   });
 }
 
-// Stuff Route - Serve custom Wubu hub page
-app.get(serverUrl.pathname + 'stuff', (req, reply) => {
+// Home Route - Serve custom Wubu hub page
+app.get(serverUrl.pathname + 'home', (req, reply) => {
   try {
-    const content = tryReadFile('../views/stuff.html', import.meta.url, false);
+    const content = tryReadFile('../views/home.html', import.meta.url, false);
     reply.type('text/html').send(content);
   } catch (e) {
-    reply.code(404).send('Stuff page not found');
+    reply.code(404).send('Home page not found');
   }
 });
 

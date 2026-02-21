@@ -212,6 +212,7 @@
       display: block;
     }
   </style>
+<script>try{if(localStorage.getItem('wubu-theme')==='dark'){document.documentElement.setAttribute('data-theme', 'dark')}}catch(e){}</script>
 </head>
 
 <body>
@@ -263,8 +264,16 @@
       urlInput.value = next || '';
     }
 
+    const SCRAM_PREFIX = '{{route}}{{/scram/network/}}';
+    const SCRAM_FILES = {
+      wasm: '{{route}}{{/scram/working.wasm.wasm}}',
+      all: '{{route}}{{/scram/working.all.js}}',
+      sync: '{{route}}{{/scram/working.sync.js}}',
+    };
     let sjEncoder = null;
+    let sjDecode = null;
     let sjAvailable = false;
+    let sjControllerPromise = null;
 
     // Utility: Search function (mirrors surf.html logic)
     function processUrl(url) {
@@ -286,7 +295,7 @@
 
     function unwrapScramjetProxyUrl(proxyUrl) {
       try {
-        const sjPrefix = '/worker/network/';
+        const sjPrefix = SCRAM_PREFIX;
         let text = String(proxyUrl || '');
         const idx = text.lastIndexOf(sjPrefix);
         if (idx === -1) return null;
@@ -312,16 +321,49 @@
     }
 
     async function normalizeCachedProxyUrl(cacheValue) {
-      const raw = decodeURIComponent(String(cacheValue || ''));
-      // If this is a Scramjet URL, normalize it to exactly one proxy encoding pass.
-      if (raw.includes('/worker/network/')) {
-        const original = unwrapScramjetProxyUrl(raw);
-        if (original) {
-          const prox = await getProxyUrlAsync(processUrl(original), { forceEngine: 'ultraviolet' });
-          return prox.url;
+      return decodeURIComponent(String(cacheValue || ''));
+    }
+
+    async function ensureScramjetController() {
+      if (sjControllerPromise) return sjControllerPromise;
+
+      sjControllerPromise = (async () => {
+        if (window.proxyReady) {
+          try { await window.proxyReady; } catch { }
         }
+        if (!self.$scramjetLoadController) return null;
+        const { ScramjetController } = await self.$scramjetLoadController();
+        const controller = new ScramjetController({ prefix: SCRAM_PREFIX, files: SCRAM_FILES });
+        if (typeof controller.init === 'function') {
+          try { await controller.init(); } catch { }
+        }
+        sjEncoder = controller.encodeUrl?.bind(controller) || null;
+        sjDecode = controller.decodeUrl?.bind(controller) || null;
+        sjAvailable = !!sjEncoder;
+        return controller;
+      })().catch((e) => {
+        sjControllerPromise = null;
+        throw e;
+      });
+
+      return sjControllerPromise;
+    }
+
+    function decodeScramjetServiceUrl(href) {
+      try {
+        const u = new URL(href, location.origin);
+        const idx = u.pathname.indexOf(SCRAM_PREFIX);
+        if (idx === -1) return null;
+
+        const proxyPath = u.pathname.slice(idx) + (u.search || '') + (u.hash || '');
+        if (sjDecode) {
+          const decoded = sjDecode(proxyPath);
+          if (decoded) return decoded;
+        }
+        return unwrapScramjetProxyUrl(proxyPath);
+      } catch {
+        return null;
       }
-      return raw;
     }
 
     function decodeUvServiceUrl(href) {
@@ -367,18 +409,31 @@
         if (href === 'about:blank' || href.startsWith('about:blank')) return null;
         // Don't show internal Rammerhead session URLs in the address bar.
         if (isRammerheadProxyHref(href)) return null;
+        const decodedScram = decodeScramjetServiceUrl(href);
+        if (decodedScram) return decodedScram;
         const decoded = decodeUvServiceUrl(href);
         if (decoded) return decoded;
 
-        // If this is a UV service URL but UV isn't ready yet (or decode failed),
-        // don't clobber the URL bar with localhost URLs.
+        // If this is an internal proxy URL but decode failed, avoid clobbering the bar.
         try {
-          const cfg = self.__uv$config;
-          if (cfg && cfg.prefix) {
-            const prefixPath = new URL(cfg.prefix, location.origin).pathname;
-            const u = new URL(href, location.origin);
-            if (u.pathname.startsWith(prefixPath)) return null;
+          const u = new URL(href, location.origin);
+          if (u.origin === location.origin) {
+            const p = String(u.pathname || '');
+            const internalPrefixes = [
+              SCRAM_PREFIX,
+              '/worker/',
+              '/network/',
+              '/s',
+              '/gmt/',
+              '/cron/',
+              '/api/',
+            ];
+            if (internalPrefixes.some((prefix) => p.startsWith(prefix) || p.includes(prefix))) {
+              return null;
+            }
           }
+          const cfg = self.__uv$config;
+          if (cfg && cfg.prefix && u.pathname.startsWith(new URL(cfg.prefix, location.origin).pathname)) return null;
         } catch { }
 
         return href;
@@ -387,17 +442,33 @@
       }
     }
 
-    function getProxyUrl(target) {
-      // Use Ultraviolet by default for stability
+    function isWubuErrorPage(iframe) {
+      try {
+        const doc = iframe?.contentWindow?.document;
+        if (!doc) return false;
+        const title = String(doc.title || '').toLowerCase();
+        if (title.includes('wubu') && title.includes('error')) return true;
+        const h1 = String(doc.querySelector('h1')?.textContent || '').trim().toLowerCase();
+        const h2 = String(doc.querySelector('h2')?.textContent || '').trim().toLowerCase();
+        return h1 === 'oops!' || (h1 === 'oops' && h2.includes('something went wrong'));
+      } catch {
+        return false;
+      }
+    }
+
+    async function getProxyUrl(target) {
+      await ensureScramjetController().catch(() => null);
+
+      // Primary normal-proxy path: Scramjet.
+      if (sjAvailable && sjEncoder) {
+        const encoded = String(sjEncoder(target) || '');
+        return encoded.startsWith('/') ? encoded : SCRAM_PREFIX + encoded;
+      }
+
+      // Compatibility fallback if only __uv$config is available.
       const config = self.__uv$config;
       if (config) {
         return config.prefix + config.encodeUrl(target);
-      }
-
-      // Fallback to Scramjet
-      if (sjAvailable && sjEncoder) {
-        const encoded = sjEncoder(target);
-        return encoded.startsWith('/') ? location.origin + encoded : encoded;
       }
 
       return target;
@@ -430,16 +501,7 @@
     }
 
     function shouldUseRammerheadFor(urlStr) {
-      try {
-        const u = new URL(urlStr);
-        const h = (u.hostname || '').toLowerCase();
-        if (!h) return false;
-        if (RH_HOST_ALLOWLIST.includes(h)) return true;
-        if (h.endsWith('.google.com') && (h.startsWith('accounts.') || h.startsWith('myaccount.') || h.startsWith('consent.') || h.startsWith('signin.'))) return true;
-        return false;
-      } catch {
-        return false;
-      }
+      return false;
     }
 
     function getBaseRoutePrefix() {
@@ -448,101 +510,23 @@
       if (!r) return '';
       return (r.startsWith('/') ? r : '/' + r).replace(/\/+$/, '');
     }
-
-    async function rhFetchText(pathname) {
-      const base = getBaseRoutePrefix();
-      const p = String(pathname || '');
-      const url = base + (p.startsWith('/') ? p : '/' + p);
-      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
-      if (!res.ok) throw new Error(`Rammerhead API ${p} failed: ${res.status}`);
-      return await res.text();
-    }
-
     async function getOrCreateRammerheadSessionId() {
-      const key = 'session-string';
-      const existing = (localStorage.getItem(key) || '').trim();
-      if (existing) {
-        try {
-          const st = (await rhFetchText('/sessionexists?id=' + encodeURIComponent(existing))).trim();
-          if (st === 'exists') return existing;
-        } catch { }
-      }
-
-      const id = (await rhFetchText('/newsession')).trim();
-      if (!/^[a-z0-9]{32}$/i.test(id)) throw new Error('Invalid Rammerhead session id');
-      localStorage.setItem(key, id);
-      return id;
-    }
-
-    function mod(n, m) {
-      return ((n % m) + m) % m;
-    }
-
-    class RhStrShuffler {
-      constructor(dictionary) {
-        this.dictionary = String(dictionary || '');
-      }
-      shuffle(str) {
-        const baseDictionary = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~-';
-        const shuffledIndicator = '_rhs';
-        const s = String(str || '');
-        if (!s.indexOf(shuffledIndicator)) return s;
-
-        let out = '';
-        for (let i = 0; i < s.length; i++) {
-          const ch = s[i];
-          const idx = baseDictionary.indexOf(ch);
-          if (ch === '%' && s.length - i >= 3) out += ch + s[++i] + s[++i];
-          else if (idx === -1) out += ch;
-          else out += this.dictionary[mod(idx + i, baseDictionary.length)];
-        }
-        return shuffledIndicator + out;
-      }
+      return '';
     }
 
     async function getRammerheadProxyUrl(target) {
-      const id = await getOrCreateRammerheadSessionId();
-      let dict = null;
-      try {
-        const raw = await rhFetchText('/api/shuffleDict?id=' + encodeURIComponent(id));
-        dict = JSON.parse(raw);
-      } catch { }
-
-      const encoded = dict ? new RhStrShuffler(dict).shuffle(target) : target;
       const base = getBaseRoutePrefix();
-      return location.origin + base + '/' + id + '/' + encoded;
+      return location.origin + base + '/dummy/' + target;
     }
 
     async function getProxyUrlAsync(target, opts = {}) {
-      const force = String(opts.forceEngine || '').toLowerCase();
-      const wantRh = force === 'rammerhead' || (force !== 'ultraviolet' && shouldUseRammerheadFor(target));
-
-      if (wantRh) {
-        try {
-          return { engine: 'rammerhead', url: await getRammerheadProxyUrl(target) };
-        } catch (e) {
-          console.warn('Rammerhead failed, falling back to UV:', e);
-        }
-      }
-      return { engine: 'ultraviolet', url: getProxyUrl(target) };
+      return { engine: 'scramjet', url: await getProxyUrl(target) };
     }
 
     // Initialize Scramjet
-    (async () => {
-      if (self.$scramjetLoadController) {
-        try {
-          const { ScramjetController } = await self.$scramjetLoadController();
-          const controller = new ScramjetController({
-            prefix: '/worker/network/'
-          });
-          sjEncoder = controller.encodeUrl;
-          sjAvailable = true;
-          console.log("Scramjet Ready");
-        } catch (e) {
-          console.error("Scramjet Init Failed", e);
-        }
-      }
-    })();
+    ensureScramjetController()
+      .then(() => console.log("Scramjet Ready"))
+      .catch((e) => console.error("Scramjet Init Failed", e));
 
     function createTab(initialUrl) {
       tabCounter++;
@@ -572,10 +556,38 @@
         iframe,
         title: 'New Tab',
         url: initialUrl || '',
-        displayUrl: initialUrl || ''
+        displayUrl: initialUrl || '',
+        retryCount: 0,
       };
 
       iframe.addEventListener('load', () => {
+        // Automatic recovery: if proxy raced and loaded our local error page,
+        // retry the original destination once the proxy stack is ready.
+        if (
+          isWubuErrorPage(iframe) &&
+          tabData.rawUrl &&
+          !tabData.recovering &&
+          tabData.retryCount < 2
+        ) {
+          tabData.recovering = true;
+          tabData.retryCount += 1;
+          Promise.resolve((async () => {
+            try {
+              await ensureScramjetController().catch(() => null);
+              if (window.proxyReady) await window.proxyReady.catch(() => null);
+              await new Promise((r) => setTimeout(r, 120));
+              await navigateTab(
+                tabData.id,
+                tabData.rawUrl,
+                { forceEngine: tabData.engine === 'rammerhead' ? 'rammerhead' : 'scramjet' }
+              );
+            } finally {
+              tabData.recovering = false;
+            }
+          })());
+          return;
+        }
+
         // Keep the URL bar in sync with in-page navigations (clicks, SPA navigations that trigger loads, etc).
         const shown = getDisplayedUrlFromIframe(iframe);
         if (shown) {
@@ -609,7 +621,7 @@
       const active = tabs.find(t => t.id === id);
       if (active) {
         // Prefer the decoded/display URL, fall back to the last raw URL we know about.
-        setUrlBarValue((active.displayUrl || active.rawUrl || active.url || '').split('?')[0]);
+        setUrlBarValue(active.displayUrl || active.rawUrl || active.url || '');
         updateTabInfo(active);
       }
     }
@@ -717,7 +729,7 @@
         // Keep the URL bar synced to the current page inside the iframe.
         const shown = getDisplayedUrlFromIframe(iframe);
         if (shown) {
-          // If the user gets navigated into Google/YouTube auth flows while using UV, switch to Rammerhead.
+          // If the user gets navigated into Google/YouTube auth flows while using Scramjet, switch to Rammerhead.
           // This is a pragmatic workaround for Google's "This browser or app may not be secure" / unsupported browser checks.
           if (shouldUseRammerheadFor(shown) && tab.engine !== 'rammerhead') {
             const now = Date.now();
@@ -788,7 +800,7 @@
       isEditingUrl = false;
       // After the user leaves the box, resync it to the active tab.
       const t = tabs.find(x => x.id === activeTabId);
-      if (t) setUrlBarValue((t.displayUrl || t.rawUrl || t.url || '').split('?')[0]);
+      if (t) setUrlBarValue(t.displayUrl || t.rawUrl || t.url || '');
     });
     urlInput.addEventListener('input', (e) => {
       // Only trust real user typing; programmatic updates shouldn't lock the bar.
@@ -882,13 +894,17 @@
         t.title = "Browsing";
         t.el.querySelector('.tab-title').textContent = "Browsing";
 
-        // Best-effort: decode the UV service URL so the address bar shows the real URL immediately.
-        // Otherwise the UI may briefly show localhost until UV config is ready.
+        // Best-effort: decode the proxied service URL so the address bar shows the real URL immediately.
+        // Otherwise the UI may briefly show localhost-style internal URLs.
         try {
           for (let i = 0; i < 40 && !window.__uv$config; i++) {
             await new Promise(r => setTimeout(r, 50));
           }
-          const decoded = decodeUvServiceUrl(new URL(proxyUrl, location.origin).href);
+          const fullProxyHref = new URL(proxyUrl, location.origin).href;
+          const decoded =
+            decodeScramjetServiceUrl(fullProxyHref) ||
+            decodeUvServiceUrl(fullProxyHref) ||
+            unwrapScramjetProxyUrl(fullProxyHref);
           if (decoded) {
             t.rawUrl = decoded;
             t.displayUrl = decoded;

@@ -25,6 +25,12 @@ const defaultTransport = "epoch";
 const hostedOnHf = /\.hf\.space$/i.test(location.hostname);
 const defaultWisp = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/wisp/}}";
 const fallbackWisp = "wss://wisp.mercurywork.shop/";
+const scramPrefix = "{{route}}{{/scram/network/}}";
+const scramFiles = {
+  wasm: "{{route}}{{/scram/working.wasm.wasm}}",
+  all: "{{route}}{{/scram/working.all.js}}",
+  sync: "{{route}}{{/scram/working.sync.js}}",
+};
 let lastTransportSelection = null;
 let recoveringTransport = false;
 
@@ -160,9 +166,12 @@ async function installUvCompatShim() {
 
   try {
     const { ScramjetController } = self.$scramjetLoadController();
-    const prefix = "{{route}}{{/scram/network/}}";
-    const controller = new ScramjetController({ prefix });
+    const prefix = scramPrefix;
+    const controller = new ScramjetController({ prefix, files: scramFiles });
     await initScramjetController(controller);
+    if (typeof controller.modifyConfig === "function") {
+      await controller.modifyConfig({ prefix, files: scramFiles });
+    }
 
     const stripPrefix = (value) => {
       const text = String(value || "");
@@ -182,7 +191,7 @@ async function installUvCompatShim() {
       },
       // Keep fields for compatibility with older callers.
       bundle: "{{route}}{{/scram/scramjet.bundle.js}}",
-      config: "{{route}}{{/scram/scramjet.config.js}}",
+      config: "{{route}}{{/scram/working.sync.js}}",
       sw: "{{route}}{{/scram/working.sw.js}}",
     };
     return true;

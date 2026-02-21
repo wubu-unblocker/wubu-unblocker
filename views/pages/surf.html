@@ -15,6 +15,7 @@
   <script src="{{route}}{{assets/js/register-sw.js}}{{inline}}" defer></script>
   <script src="{{route}}{{assets/js/common.js}}{{inline}}" defer></script>
   }}
+<script>try{if(localStorage.getItem('wubu-theme')==='dark'){document.documentElement.setAttribute('data-theme', 'dark')}}catch(e){}</script>
 </head>
 
 <body>
@@ -24,6 +25,193 @@
   </div>
 
   <main class="container">
+    <style class="proxy-animations">
+        .proxy-bg-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
+            opacity: 0.05;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+            pointer-events: none;
+            animation: pulseGlow 5s infinite alternate ease-in-out;
+        }
+        
+        @keyframes pulseGlow {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.03; }
+            100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.08; }
+        }
+
+        .search-box {
+            position: relative;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 100px; /* Make sure shadow follows round shape */
+        }
+        .search-box:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px 5px rgba(239, 71, 111, 0.4);
+        }
+        .search-box:focus-within, .search-box:hover:focus-within {
+            transform: scale(1);
+            box-shadow: 0 0 15px 2px rgba(239, 71, 111, 0.7);
+        }
+
+        .cards-grid .card {
+            animation: cardFloat 3s infinite alternate ease-in-out;
+            animation-delay: calc(var(--anim-delay) * 1s);
+        }
+
+        @keyframes cardFloat {
+            0% { transform: translateY(0px); }
+            100% { transform: translateY(-8px); }
+        }
+        
+        main { position: relative; }
+    </style>
+    
+    <!-- Interactive 3D Background -->
+    <canvas id="bg-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none; opacity: 0.6;"></canvas>
+    <script>
+        (function() {
+            const canvas = document.getElementById('bg-canvas');
+            const ctx = canvas.getContext('2d');
+            let width, height;
+
+            // Nodes
+            const nodes = [];
+            const numNodes = 80;
+            const maxDistance = 150;
+
+            // Mouse tracking
+            let mouseX = 0;
+            let mouseY = 0;
+            let targetMouseX = 0;
+            let targetMouseY = 0;
+
+            function resize() {
+                const parent = canvas.parentElement;
+                width = parent.clientWidth || window.innerWidth;
+                height = parent.clientHeight || window.innerHeight;
+                canvas.width = width * window.devicePixelRatio;
+                canvas.height = height * window.devicePixelRatio;
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            }
+
+            window.addEventListener('resize', resize);
+            document.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                targetMouseX = e.clientX - rect.left;
+                targetMouseY = e.clientY - rect.top;
+            });
+
+            // Initialize nodes
+            for (let i = 0; i < numNodes; i++) {
+                nodes.push({
+                    x: Math.random() * 2000 - 1000, 
+                    y: Math.random() * 2000 - 1000,
+                    z: Math.random() * 2 + 0.1, // Depth
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5
+                });
+            }
+
+            // Get color from CSS variable or fallback
+            function getAccent() {
+                const root = document.documentElement;
+                const isDark = root.getAttribute('data-theme') === 'dark';
+                return isDark ? '138, 43, 226' : '99, 102, 241';
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, width, height);
+
+                // Smooth mouse interpolation (easing)
+                mouseX += (targetMouseX - mouseX) * 0.05;
+                mouseY += (targetMouseY - mouseY) * 0.05;
+
+                // Center coordinates
+                const cx = width / 2;
+                const cy = height / 2;
+
+                const accentProps = getAccent();
+
+                // Project 3D to 2D
+                const projected = nodes.map(node => {
+                    // Parallax shift based on mouse and node depth
+                    const dx = (mouseX - cx) * node.z * 0.5;
+                    const dy = (mouseY - cy) * node.z * 0.5;
+
+                    // Move nodes
+                    node.x += node.vx;
+                    node.y += node.vy;
+
+                    // Wrap around logic roughly
+                    if(node.x > 1500) node.x = -1500;
+                    if(node.x < -1500) node.x = 1500;
+                    if(node.y > 1500) node.y = -1500;
+                    if(node.y < -1500) node.y = 1500;
+
+                    // Calculate final 2D pos
+                    const scale = 3 / (3 + node.z); // Perspective scale
+                    return {
+                        x: cx + (node.x + dx) * scale,
+                        y: cy + (node.y + dy) * scale,
+                        scale: scale,
+                        z: node.z
+                    };
+                });
+
+                // Draw lines between close nodes
+                ctx.lineWidth = 1;
+                for (let i = 0; i < projected.length; i++) {
+                    const p1 = projected[i];
+                    
+                    // Only process visibly on screen
+                    if(p1.x < -100 || p1.x > width + 100 || p1.y < -100 || p1.y > height + 100) continue;
+
+                    for (let j = i + 1; j < projected.length; j++) {
+                        const p2 = projected[j];
+                        const distSq = (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2;
+
+                        if (distSq < maxDistance * maxDistance) {
+                            const opacity = (1 - Math.sqrt(distSq) / maxDistance) * 0.9 * p1.scale;
+                            ctx.strokeStyle = `rgba(${accentProps}, ${opacity})`;
+                            ctx.beginPath();
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                // Draw points
+                for (let i = 0; i < projected.length; i++) {
+                    const p = projected[i];
+                    if(p.x < -50 || p.x > width + 50 || p.y < -50 || p.y > height + 50) continue;
+                    
+                    const opacity = 0.8 * p.scale;
+                    ctx.fillStyle = `rgba(${accentProps}, ${opacity})`;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 2 * p.scale, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+            // Init
+            setTimeout(() => {
+                resize();
+                draw();
+            }, 100);
+        })();
+    </script>
+
+    <div class="proxy-bg-glow"></div>
+    
     <h1 class="page-title">Web Proxies</h1>
     <p class="page-subtitle">
       Choose a proxy engine and browse the web freely
@@ -43,22 +231,22 @@
 
       <!-- Preset Cards -->
       <div class="cards-grid">
-        <div class="card" onclick="goProx('https://youtube.com')">
+        <div class="card" style="--anim-delay: 0.2" onclick="goProx('https://youtube.com')">
           <div class="card-icon"><i class="fab fa-youtube"></i></div>
           <h3>YouTube</h3>
           <p>Watch videos</p>
         </div>
-        <div class="card" onclick="goProx('https://discord.com')">
+        <div class="card" style="--anim-delay: 0.4" onclick="goProx('https://discord.com')">
           <div class="card-icon"><i class="fab fa-discord"></i></div>
           <h3>Discord</h3>
           <p>Chat with friends</p>
         </div>
-        <div class="card" onclick="goProx('https://google.com')">
+        <div class="card" style="--anim-delay: 0.6000000000000001" onclick="goProx('https://google.com')">
           <div class="card-icon"><i class="fab fa-google"></i></div>
           <h3>Google</h3>
           <p>Search the web</p>
         </div>
-        <div class="card" onclick="goProx('https://tiktok.com')">
+        <div class="card" style="--anim-delay: 0.8" onclick="goProx('https://tiktok.com')">
           <div class="card-icon"><i class="fab fa-tiktok"></i></div>
           <h3>TikTok</h3>
           <p>Short videos</p>
@@ -83,51 +271,77 @@
       return 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
     }
 
+    const SCRAM_PREFIX = '{{route}}{{/scram/network/}}';
+    const SCRAM_FILES = {
+      wasm: '{{route}}{{/scram/working.wasm.wasm}}',
+      all: '{{route}}{{/scram/working.all.js}}',
+      sync: '{{route}}{{/scram/working.sync.js}}',
+    };
+    let scramControllerPromise = null;
+
+    function withTimeout(promise, ms) {
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('Timeout')), ms);
+        Promise.resolve(promise).then(
+          (v) => { clearTimeout(t); resolve(v); },
+          (e) => { clearTimeout(t); reject(e); }
+        );
+      });
+    }
+
+    async function getScramjetController() {
+      if (scramControllerPromise) return scramControllerPromise;
+
+      scramControllerPromise = (async () => {
+        // register-sw.js initializes transport/SW; waiting here avoids first-click failures.
+        if (window.proxyReady) {
+          try {
+            await withTimeout(window.proxyReady, 7000);
+          } catch { }
+        }
+
+        if (!window.$scramjetLoadController) return null;
+        const { ScramjetController } = await window.$scramjetLoadController();
+        const controller = new ScramjetController({ prefix: SCRAM_PREFIX, files: SCRAM_FILES });
+        if (typeof controller.init === 'function') {
+          try { await controller.init(); } catch { }
+        }
+        return controller;
+      })().catch((e) => {
+        scramControllerPromise = null;
+        throw e;
+      });
+
+      return scramControllerPromise;
+    }
+
     async function goProx(url) {
       const input = document.getElementById('uv-address');
       if (input) input.disabled = true;
 
       const target = processUrl(url);
 
-      // Prioritize UV for stability
-      // If config isn't loaded yet, try to wait a bit
-      let tries = 0;
-      while (!window.__uv$config && tries < 10) {
-        await new Promise(r => setTimeout(r, 100));
-        tries++;
+      // Primary normal-proxy path: Scramjet.
+      try {
+        const controller = await getScramjetController();
+        if (controller) {
+          const encoded = String(controller.encodeUrl(target) || '');
+          const proxyPath = encoded.startsWith('/') ? encoded : (SCRAM_PREFIX + encoded);
+          window.location.href = '/s?cache=' + encodeURIComponent(proxyPath);
+          return;
+        }
+      } catch (e) {
+        console.error('Scramjet Init Error', e);
       }
 
+      // Compatibility fallback for older flows that still read __uv$config.
       if (window.__uv$config) {
         const encoded = window.__uv$config.prefix + window.__uv$config.encodeUrl(target);
-        // Use relative path for cache param
         window.location.href = '/s?cache=' + encodeURIComponent(encoded);
         return;
       }
 
-      // Fallback to Scramjet if UV is somehow missing
-      try {
-        if (window.$scramjetLoadController) {
-          const { ScramjetController } = await window.$scramjetLoadController();
-          const controller = new ScramjetController({
-            prefix: '/worker/network/'
-          });
-          if (typeof controller.init === 'function') {
-            try { await controller.init(); } catch { }
-          }
-          const encoded = controller.encodeUrl(target);
-          window.location.href = '/s?cache=' + encodeURIComponent(encoded);
-          return;
-        }
-      } catch (e) {
-        console.error("Scramjet Init Error", e);
-      }
-
-      // Last resort: hardcoded UV path (xor encoding)
-      const xorEncode = (str) => {
-        if (!str) return str;
-        return encodeURIComponent(str.split('').map((char, i) => i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char).join(''));
-      };
-      window.location.href = '/s?cache=' + encodeURIComponent('/network/service/' + xorEncode(target));
+      alert('Proxy is still loading. Please try again in a moment.');
     }
 
     const addrInput = document.getElementById('uv-address');
@@ -154,6 +368,59 @@
       }
     });
   </script>
+
+<script>
+    if(!window.wubuThemeSetup) {
+        window.wubuThemeSetup = true;
+        const root = document.documentElement;
+        
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                root.setAttribute('data-theme', 'dark');
+            } else {
+                root.removeAttribute('data-theme');
+            }
+            localStorage.setItem('wubu-theme', theme);
+            
+            // Update all toggle buttons on page
+            document.querySelectorAll('#themeToggle').forEach(btn => {
+                btn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            });
+        }
+        
+        const currentTheme = localStorage.getItem('wubu-theme') || 'light';
+        applyTheme(currentTheme);
+        
+        // Listeners for all theme buttons
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#themeToggle');
+            if(btn) {
+                const isDark = root.hasAttribute('data-theme');
+                applyTheme(isDark ? 'light' : 'dark');
+            }
+        });
+
+        // Dropdown toggle globally
+        document.addEventListener('click', (e) => {
+            const moreBtn = e.target.closest('#moreDocsBtn');
+            const dropdown = document.getElementById('moreDropdown');
+            if(moreBtn && dropdown) {
+                e.preventDefault();
+                e.stopPropagation();
+                if(dropdown.style.display === 'block') {
+                    dropdown.style.opacity = '0';
+                    setTimeout(() => dropdown.style.display = 'none', 200);
+                } else {
+                    dropdown.style.display = 'block';
+                    dropdown.style.opacity = '1';
+                }
+            } else if(dropdown && dropdown.style.display === 'block' && !e.target.closest('#moreDropdown')) {
+                dropdown.style.opacity = '0';
+                setTimeout(() => dropdown.style.display = 'none', 200);
+            }
+        });
+    }
+</script>
 </body>
 
 </html>

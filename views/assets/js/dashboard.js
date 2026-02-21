@@ -60,32 +60,73 @@ function search(input) {
     return `https://google.com/search?q=${encodeURIComponent(input)}`;
 }
 
+const SCRAM_PREFIX = '{{route}}{{/scram/network/}}';
+const SCRAM_FILES = {
+    wasm: '{{route}}{{/scram/working.wasm.wasm}}',
+    all: '{{route}}{{/scram/working.all.js}}',
+    sync: '{{route}}{{/scram/working.sync.js}}',
+};
+let scramControllerPromise = null;
+
+function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("Timeout")), ms);
+        Promise.resolve(promise).then(
+            (v) => { clearTimeout(t); resolve(v); },
+            (e) => { clearTimeout(t); reject(e); }
+        );
+    });
+}
+
+async function getScramjetController() {
+    if (scramControllerPromise) return scramControllerPromise;
+
+    scramControllerPromise = (async () => {
+        if (window.proxyReady) {
+            try {
+                await withTimeout(window.proxyReady, 7000);
+            } catch { }
+        }
+        if (!self['$scramjetLoadController']) return null;
+        const { ScramjetController } = await self['$scramjetLoadController']();
+        const controller = new ScramjetController({ prefix: SCRAM_PREFIX, files: SCRAM_FILES });
+        if (typeof controller.init === 'function') {
+            try { await controller.init(); } catch { }
+        }
+        return controller;
+    })().catch((e) => {
+        scramControllerPromise = null;
+        throw e;
+    });
+
+    return scramControllerPromise;
+}
+
 async function goProx(url, useAb) {
     // Determine UV Config using the placeholder common.js used
     // standard build often replaces {{__uv$config}} with the obfuscated name
     const uvConfig = self['__uv$config'] || self['{{__uv$config}}'];
-
     let dest = "";
 
-    // TRY UV FIRST
-    if (uvConfig) {
+    // Try Scramjet first for normal proxying.
+    try {
+        const controller = await getScramjetController();
+        if (controller) {
+            console.log("Using Scramjet");
+            const encoded = String(controller.encodeUrl(search(url)) || "");
+            const proxyPath = encoded.startsWith('/') ? encoded : (SCRAM_PREFIX + encoded);
+            dest = window.location.origin + proxyPath;
+        }
+    } catch (e) {
+        console.error("Scramjet Error", e);
+    }
+    // Compatibility fallback to __uv$config if Scramjet loader isn't available yet.
+    if (!dest && uvConfig) {
         try {
-            console.log("Using UV", uvConfig);
+            console.log("Using UV compatibility config", uvConfig);
             dest = window.location.origin + uvConfig.prefix + uvConfig.encodeUrl(search(url));
         } catch (e) {
             console.error("UV Encode Error", e);
-        }
-    }
-    // FALLBACK TO SCRAMJET
-    else if (self['$scramjetLoadController']) {
-        try {
-            console.log("Using Scramjet");
-            // We need to re-instantiate because encodeUrl might not be static
-            const { ScramjetController } = await self['$scramjetLoadController']();
-            const controller = new ScramjetController({ prefix: '/scram/network/' });
-            dest = window.location.origin + '/scram/network/' + controller.encodeUrl(search(url));
-        } catch (e) {
-            console.error("Scramjet Error", e);
         }
     }
 
