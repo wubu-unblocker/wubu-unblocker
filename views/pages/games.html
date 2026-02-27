@@ -7,6 +7,7 @@
     <title>Wubu | Games</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/js/global-shortcuts.js" defer></script>
     <style>
         
 
@@ -15518,8 +15519,33 @@
             }
         }
     </script>
+    <script>
+        (function () {
+            const key = 'wubu-pending-game-search';
+            let pending = '';
+            try {
+                pending = sessionStorage.getItem(key) || '';
+                if (pending) sessionStorage.removeItem(key);
+            } catch (error) {
+                pending = '';
+            }
+            if (!pending) return;
 
+            const applyPending = () => {
+                const input = document.getElementById('game-search');
+                if (!input) return;
+                input.focus();
+                input.value = pending;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            };
 
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', applyPending, { once: true });
+            } else {
+                applyPending();
+            }
+        })();
+    </script>
 
 <script>
     if(!window.wubuThemeSetup) {
@@ -15536,6 +15562,14 @@
             
             // Update all toggle buttons on page
             document.querySelectorAll('#themeToggle').forEach(btn => {
+                const tagName = (btn.tagName || '').toLowerCase();
+                if (tagName === 'svg') {
+                    btn.classList.toggle('dark-mode', theme === 'dark');
+                    btn.setAttribute('role', 'button');
+                    btn.setAttribute('tabindex', '0');
+                    btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+                    return;
+                }
                 btn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
             });
         }

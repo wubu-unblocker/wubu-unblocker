@@ -7,6 +7,7 @@
     <title>Blooket Proxy</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/js/global-shortcuts.js" defer></script>
     <link rel="stylesheet" href="assets/css/wubu.css">
     <style>
         /* Override specific Blooket page layouts while keeping dashboard theme */
@@ -485,6 +486,14 @@
             
             // Update all toggle buttons on page
             document.querySelectorAll('#themeToggle').forEach(btn => {
+                const tagName = (btn.tagName || '').toLowerCase();
+                if (tagName === 'svg') {
+                    btn.classList.toggle('dark-mode', theme === 'dark');
+                    btn.setAttribute('role', 'button');
+                    btn.setAttribute('tabindex', '0');
+                    btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+                    return;
+                }
                 btn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
             });
         }

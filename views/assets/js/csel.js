@@ -14,9 +14,7 @@
   date = date.toUTCString();
 
   const defaultTitle = document.title || 'Wubu';
-  const defaultIconHref =
-    document.querySelector("link[rel*='icon']")?.href ||
-    '{{route}}{{assets/ico/favicon.ico}}';
+  const defaultIconHref = `${location.origin}/assets/ico/favicon.ico`;
 
   // Cookies will not be used unless necessary. The localStorage API will be used instead.
   const storageId = '{{hu-lts}}-storage',
@@ -68,6 +66,13 @@
         element.href = value;
         document.head.appendChild(element);
       });
+    },
+    resetPageIcon = () => {
+      document.querySelectorAll("link[rel*='icon']").forEach((element) => element.remove());
+      const element = document.createElement('link');
+      element.rel = 'icon';
+      element.href = defaultIconHref;
+      document.head.appendChild(element);
     },
     // Make a small stylesheet to override a setting from the main stylesheet.
     pageShowAds = () => {
@@ -150,6 +155,10 @@
     // Firefox is not supported by epoxy yet, which is why this is implemented.
     defaultMode = '{{epoxy}}',
     defaultSearch = '{{defaultSearch}}';
+  const panicUrlKey = 'wubu-panic-url';
+  const panicKeybindKey = 'wubu-panic-keybind';
+  const defaultPanicUrl = 'https://www.clever.com';
+  const defaultPanicKeybind = 'Ctrl+Shift+X';
 
   // All code in this block is used by menu items that adjust website settings.
 
@@ -206,6 +215,19 @@
         setStorage('Icon', icon);
       }
     };
+    const normalizePanicUrl = (value) => {
+      const raw = `${value || ''}`.trim();
+      if (!raw) return defaultPanicUrl;
+      try {
+        return new URL(raw).toString();
+      } catch {
+        try {
+          return new URL(`https://${raw}`).toString();
+        } catch {
+          return defaultPanicUrl;
+        }
+      }
+    };
 
     // Allow users to set a custom title with the UI.
     attachEventListener('titleform', 'submit', (e) => {
@@ -231,7 +253,7 @@
         e.value = '';
       } else if (confirm('Reset the icon to default?')) {
         removeStorage('Icon');
-        pageIcon(defaultIconHref);
+        resetPageIcon();
       }
     });
 
@@ -272,11 +294,46 @@
       removeStorage('Title');
       removeStorage('Icon');
       pageTitle(defaultTitle);
-      pageIcon(defaultIconHref);
+      resetPageIcon();
       let t = document.getElementById('titleform');
       if (t) t.firstElementChild.value = '';
       let i = document.getElementById('iconform');
       if (i) i.firstElementChild.value = '';
+    });
+
+    const panicUrlInput = document.getElementById('panic-url-input');
+    const panicKeybindInput = document.getElementById('panic-keybind-input');
+    if (panicUrlInput) {
+      panicUrlInput.value = localStorage.getItem(panicUrlKey) || defaultPanicUrl;
+    }
+    if (panicKeybindInput) {
+      panicKeybindInput.value = localStorage.getItem(panicKeybindKey) || defaultPanicKeybind;
+    }
+
+    attachEventListener('panic-url-form', 'submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('panic-url-input');
+      if (!input) return;
+      localStorage.setItem(panicUrlKey, normalizePanicUrl(input.value));
+      input.value = localStorage.getItem(panicUrlKey) || defaultPanicUrl;
+    });
+
+    attachEventListener('panic-keybind-form', 'submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('panic-keybind-input');
+      if (!input) return;
+      const value = `${input.value || ''}`.trim();
+      localStorage.setItem(panicKeybindKey, value || defaultPanicKeybind);
+      input.value = localStorage.getItem(panicKeybindKey) || defaultPanicKeybind;
+    });
+
+    attachEventListener('panic-reset', 'click', () => {
+      localStorage.setItem(panicUrlKey, defaultPanicUrl);
+      localStorage.setItem(panicKeybindKey, defaultPanicKeybind);
+      const inputUrl = document.getElementById('panic-url-input');
+      const inputKey = document.getElementById('panic-keybind-input');
+      if (inputUrl) inputUrl.value = defaultPanicUrl;
+      if (inputKey) inputKey.value = defaultPanicKeybind;
     });
 
     attachClassEventListener('search-engine-list', 'change', (e) => {

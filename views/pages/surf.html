@@ -11,7 +11,7 @@
   <script src="{{route}}{{baremux/index.js}}{{inline}}" defer></script>
   <!-- Scramjet bundle is kept for compatibility with preset buttons and legacy handlers.
        Scramjet SW is disabled by default in register-sw.js unless EnableScramjet=true. -->
-  <script src="{{route}}{{scram/scramjet.bundle.js}}{{inline}}" defer></script>
+  <script src="{{route}}{{scram/scramjet.all.js}}{{inline}}" defer></script>
   <script src="{{route}}{{assets/js/register-sw.js}}{{inline}}" defer></script>
   <script src="{{route}}{{assets/js/common.js}}{{inline}}" defer></script>
   }}
@@ -212,9 +212,9 @@
 
     <div class="proxy-bg-glow"></div>
     
-    <h1 class="page-title">Web Proxies</h1>
-    <p class="page-subtitle">
-      Choose a proxy engine and browse the web freely
+    <h1 class="page-title" style="text-align: center;">Web Proxies</h1>
+    <p class="page-subtitle" style="text-align: center;">
+      Enter a URL and browse instantly with the built-in proxy
     </p>
 
     <!-- Search Section -->
@@ -384,6 +384,14 @@
             
             // Update all toggle buttons on page
             document.querySelectorAll('#themeToggle').forEach(btn => {
+                const tagName = (btn.tagName || '').toLowerCase();
+                if (tagName === 'svg') {
+                    btn.classList.toggle('dark-mode', theme === 'dark');
+                    btn.setAttribute('role', 'button');
+                    btn.setAttribute('tabindex', '0');
+                    btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+                    return;
+                }
                 btn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
             });
         }

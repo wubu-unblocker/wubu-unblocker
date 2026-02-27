@@ -125,6 +125,14 @@ body {
     color: var(--accent) !important;
 }
 
+.nav-links a:visited {
+    color: var(--text-secondary);
+}
+
+.nav-links a.active:visited {
+    color: var(--accent) !important;
+}
+
 .nav-links a:hover::after,
 .nav-links a.active::after {
     width: 100%;
@@ -155,6 +163,34 @@ body {
     border-color: rgba(199, 125, 255, 0.3);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(138, 43, 226, 0.2);
+}
+
+#themeToggle,
+#themeToggle:focus,
+#themeToggle:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#moreDocsBtn {
+    background: linear-gradient(135deg, var(--bg-secondary), rgba(138, 43, 226, 0.14));
+    border-color: rgba(157, 78, 221, 0.38);
+    color: #c77dff;
+    box-shadow: 0 6px 18px rgba(138, 43, 226, 0.16);
+}
+
+#moreDocsBtn:hover {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.24), rgba(123, 44, 191, 0.24));
+    border-color: rgba(199, 125, 255, 0.62);
+    color: #f5e9ff;
+    box-shadow: 0 10px 24px rgba(138, 43, 226, 0.24);
+}
+
+#moreDropdown {
+    border-radius: 14px !important;
+    border-color: rgba(157, 78, 221, 0.35) !important;
+    box-shadow: 0 18px 42px rgba(15, 17, 21, 0.3) !important;
 }
 
 /* Stunning Hero Section */

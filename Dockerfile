@@ -1,14 +1,13 @@
 FROM node:20-alpine
 
-WORKDIR /app
-
 LABEL org.opencontainers.image.title="Wubu Unblocker" \
       org.opencontainers.image.description="Science for Kids - Web Proxy Service" \
       org.opencontainers.image.version="1.0.0"
 
-# Install required dependencies including Chromium for Puppeteer
+WORKDIR /workspace
+
+# Runtime/build deps for HF + Puppeteer.
 RUN apk add --no-cache \
-    tor \
     bash \
     dos2unix \
     unzip \
@@ -19,21 +18,24 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
-# Tell Puppeteer to skip installing Chrome. We'll be using the installed package.
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Resolve Chromium path reliably across Alpine variants.
+RUN CHROME_BIN="$(command -v chromium-browser || command -v chromium || true)" && \
+    test -n "$CHROME_BIN" && \
+    ln -sf "$CHROME_BIN" /usr/local/bin/chromium
 
-# HuggingFace zip-deploy support:
-# If the repo contains app.zip, unzip it into /app. Otherwise, treat the repo root as the app.
-WORKDIR /workspace
+ENV NODE_ENV=production \
+    PORT=7860 \
+    BLOOKET_PREWARM=false \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
+
+# HF zip deploy support:
+# If app.zip exists, extract it; otherwise use repository contents directly.
 COPY . /workspace
-
 RUN if [ -f /workspace/app.zip ]; then \
       mkdir -p /app ; \
       unzip -q /workspace/app.zip -d /app ; \
       rc=$$? ; \
-      # unzip returns 1 for "warnings" (e.g., Windows-created zips with backslashes).
-      # Treat 0/1 as success as long as files are extracted.
       if [ $$rc -ne 0 ] && [ $$rc -ne 1 ]; then exit $$rc; fi ; \
     else \
       mkdir -p /app && cp -a /workspace/. /app ; \
@@ -41,18 +43,14 @@ RUN if [ -f /workspace/app.zip ]; then \
 
 WORKDIR /app
 
-# Fix Windows line endings in shell scripts
+# Normalize shell scripts copied from Windows environments.
 RUN find . -name "*.sh" -type f -exec dos2unix {} \; 2>/dev/null || true
 
-# Install deps + build (requires dev deps like esbuild), then prune to reduce image size.
-RUN rm -f package-lock.json && npm install
+# Install deps, build dist assets, then drop dev deps.
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 RUN npm run build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev && npm cache clean --force
 
-# HuggingFace Spaces requires port 7860
-ENV PORT=7860
-EXPOSE 7860 9050 9051
+EXPOSE 7860
 
-# Start the server directly.
-# Tor is expensive and not required for normal UV/Scramjet usage; only enable when needed.
-CMD ["/bin/sh", "-c", "if [ \"${ENABLE_TOR}\" = \"true\" ]; then tor & fi; exec node src/server.mjs"]
+CMD ["node", "src/server.mjs"]

@@ -33,20 +33,80 @@ const scramFiles = {
 };
 let lastTransportSelection = null;
 let recoveringTransport = false;
+let cachedWispCandidates = null;
+const isAllowedWispUrl = (wsUrl) =>
+  typeof wsUrl === "string" &&
+  (wsUrl.startsWith("ws://") || wsUrl.startsWith("wss://")) &&
+  !/mercurywork\.shop/i.test(wsUrl);
 
 function makeWispCandidates() {
   const localCron = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/cron/}}";
   const localWisp = defaultWisp;
   const storedPublic = readStorage("PublicWisp");
+  const dedupe = (list) => [...new Set(list)];
 
   // Respect explicit user choice if present.
-  if (storedPublic === true) return [fallbackWisp, localWisp, localCron];
-  if (storedPublic === false) return [localWisp, localCron, fallbackWisp];
+  if (storedPublic === true) return dedupe([fallbackWisp, localWisp, localCron]);
+  if (storedPublic === false) return dedupe([localWisp, localCron, fallbackWisp]);
 
-  // HF Spaces often have unreliable local websocket proxying under load.
-  // Prefer public Wisp there; elsewhere keep local-first for latency.
-  if (hostedOnHf) return [fallbackWisp, localWisp, localCron];
-  return [localWisp, localCron, fallbackWisp];
+  // Keep local endpoints first even on HF so school networks that block public
+  // Wisp domains can still connect.
+  if (hostedOnHf) return dedupe([localWisp, localCron, fallbackWisp]);
+  return dedupe([localWisp, localCron, fallbackWisp]);
+}
+
+function probeWsReachable(wsUrl, timeoutMs = hostedOnHf ? 2500 : 1800) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    let ws = null;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, "probe");
+      } catch {
+        // ignore
+      }
+      resolve(ok);
+    };
+
+    timer = setTimeout(() => finish(false), timeoutMs);
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.addEventListener("open", () => finish(true), { once: true });
+      ws.addEventListener("error", () => finish(false), { once: true });
+      ws.addEventListener("close", () => finish(false), { once: true });
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function getOrderedWispCandidates(forceRefresh = false) {
+  if (!forceRefresh && cachedWispCandidates?.length) return cachedWispCandidates;
+
+  const candidates = makeWispCandidates().filter(isAllowedWispUrl);
+  if (!candidates.length) {
+    cachedWispCandidates = [defaultWisp];
+    return cachedWispCandidates;
+  }
+  const probes = await Promise.all(
+    candidates.map(async (wsUrl) => ({ wsUrl, reachable: await probeWsReachable(wsUrl) }))
+  );
+
+  const reachable = probes.filter((entry) => entry.reachable).map((entry) => entry.wsUrl);
+  const unreachable = probes.filter((entry) => !entry.reachable).map((entry) => entry.wsUrl);
+
+  if (reachable.length) {
+    cachedWispCandidates = [...reachable, ...unreachable];
+    return cachedWispCandidates;
+  }
+
+  // If all probes fail (e.g. strict firewall), preserve configured order so retries still happen.
+  cachedWispCandidates = candidates;
+  return cachedWispCandidates;
 }
 
 function makeTransportCandidates() {
@@ -81,7 +141,7 @@ async function verifyTransport(connection) {
   return transportPath;
 }
 
-async function setBestTransport() {
+async function setBestTransport(forceWispRefresh = false) {
   if (typeof BareMux === "undefined" || !BareMux.BareMuxConnection) {
     throw new Error("BareMux is not loaded.");
   }
@@ -90,7 +150,7 @@ async function setBestTransport() {
   localStorage.setItem("bare-mux-path", workerPath);
 
   let connection = new BareMux.BareMuxConnection(workerPath);
-  const wispCandidates = makeWispCandidates();
+  const wispCandidates = await getOrderedWispCandidates(forceWispRefresh);
   const transportCandidates = makeTransportCandidates();
 
   let lastErr = null;
@@ -117,7 +177,7 @@ async function recoverTransport(reason = "unknown") {
   recoveringTransport = true;
   try {
     console.warn("Attempting transport recovery. Reason:", reason);
-    const selected = await setBestTransport();
+    const selected = await setBestTransport(true);
     lastTransportSelection = selected;
     console.log("Transport recovered:", selected.transportPath, selected.wsUrl);
     return true;
@@ -190,7 +250,7 @@ async function installUvCompatShim() {
         return controller.decodeUrl(withPrefix);
       },
       // Keep fields for compatibility with older callers.
-      bundle: "{{route}}{{/scram/scramjet.bundle.js}}",
+      bundle: "{{route}}{{/scram/scramjet.all.js}}",
       config: "{{route}}{{/scram/working.sync.js}}",
       sw: "{{route}}{{/scram/working.sw.js}}",
     };
