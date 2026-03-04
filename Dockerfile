@@ -33,7 +33,6 @@ ENV NODE_ENV=production \
 COPY package.json package-lock.json ./
 COPY src ./src
 COPY views ./views
-COPY lib ./lib
 COPY scripts ./scripts
 COPY run-command.mjs ./
 COPY config.json ./
