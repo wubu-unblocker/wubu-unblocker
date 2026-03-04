@@ -1,6 +1,5 @@
 ---
 title: V1.0
-emoji: "??"
 colorFrom: yellow
 colorTo: pink
 sdk: docker
