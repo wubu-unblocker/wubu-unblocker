@@ -36,10 +36,9 @@ let recoveringTransport = false;
 let cachedWispCandidates = null;
 const isAllowedWispUrl = (wsUrl) =>
   typeof wsUrl === "string" &&
-  (wsUrl.startsWith("ws://") || wsUrl.startsWith("wss://")) &&
-  !/mercurywork\.shop/i.test(wsUrl);
+  (wsUrl.startsWith("ws://") || wsUrl.startsWith("wss://"));
 
-function makeWispCandidates() {
+function makeWispCandidates(preferPublic = false) {
   const localCron = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/cron/}}";
   const localWisp = defaultWisp;
   const storedPublic = readStorage("PublicWisp");
@@ -49,8 +48,9 @@ function makeWispCandidates() {
   if (storedPublic === true) return dedupe([fallbackWisp, localWisp, localCron]);
   if (storedPublic === false) return dedupe([localWisp, localCron, fallbackWisp]);
 
-  // Keep local endpoints first even on HF so school networks that block public
-  // Wisp domains can still connect.
+  // On HF, local Wisp egress can intermittently fail TLS handshakes to some sites.
+  // Allow recovery flow to prefer public Wisp first.
+  if (hostedOnHf && preferPublic) return dedupe([fallbackWisp, localWisp, localCron]);
   if (hostedOnHf) return dedupe([localWisp, localCron, fallbackWisp]);
   return dedupe([localWisp, localCron, fallbackWisp]);
 }
@@ -84,10 +84,10 @@ function probeWsReachable(wsUrl, timeoutMs = hostedOnHf ? 2500 : 1800) {
   });
 }
 
-async function getOrderedWispCandidates(forceRefresh = false) {
+async function getOrderedWispCandidates(forceRefresh = false, preferPublic = false) {
   if (!forceRefresh && cachedWispCandidates?.length) return cachedWispCandidates;
 
-  const candidates = makeWispCandidates().filter(isAllowedWispUrl);
+  const candidates = makeWispCandidates(preferPublic).filter(isAllowedWispUrl);
   if (!candidates.length) {
     cachedWispCandidates = [defaultWisp];
     return cachedWispCandidates;
@@ -109,7 +109,7 @@ async function getOrderedWispCandidates(forceRefresh = false) {
   return cachedWispCandidates;
 }
 
-function makeTransportCandidates() {
+function makeTransportCandidates(preferUnix = false) {
   const configured = readStorage("Transport");
   const list = [];
   const pushMode = (mode) => {
@@ -120,9 +120,15 @@ function makeTransportCandidates() {
 
   // On HF, libcurl frequently fails TLS handshakes. Bias toward epoxy.
   if (hostedOnHf) {
-    pushMode("epoch");
-    // Only use libcurl as a final fallback when explicitly selected.
-    if (configured === "unix" || configured === "libcurl") pushMode("unix");
+    if (preferUnix) {
+      pushMode("unix");
+      pushMode("epoch");
+    } else {
+      pushMode("epoch");
+      pushMode("unix");
+    }
+    // Keep explicit preference in front when user picked one in settings.
+    pushMode(configured);
   } else {
     pushMode(configured);
     pushMode(defaultTransport);
@@ -141,7 +147,7 @@ async function verifyTransport(connection) {
   return transportPath;
 }
 
-async function setBestTransport(forceWispRefresh = false) {
+async function setBestTransport(forceWispRefresh = false, options = {}) {
   if (typeof BareMux === "undefined" || !BareMux.BareMuxConnection) {
     throw new Error("BareMux is not loaded.");
   }
@@ -150,8 +156,11 @@ async function setBestTransport(forceWispRefresh = false) {
   localStorage.setItem("bare-mux-path", workerPath);
 
   let connection = new BareMux.BareMuxConnection(workerPath);
-  const wispCandidates = await getOrderedWispCandidates(forceWispRefresh);
-  const transportCandidates = makeTransportCandidates();
+  const wispCandidates = await getOrderedWispCandidates(
+    forceWispRefresh,
+    Boolean(options.preferPublicWisp)
+  );
+  const transportCandidates = makeTransportCandidates(Boolean(options.preferUnix));
 
   let lastErr = null;
   for (const { mode, transportPath } of transportCandidates) {
@@ -177,7 +186,15 @@ async function recoverTransport(reason = "unknown") {
   recoveringTransport = true;
   try {
     console.warn("Attempting transport recovery. Reason:", reason);
-    const selected = await setBestTransport(true);
+    const reasonText = String(reason || "").toLowerCase();
+    const tlsFailure =
+      reasonText.includes("tls handshake eof") ||
+      reasonText.includes("unexpectedeof") ||
+      reasonText.includes("hyper client");
+    const selected = await setBestTransport(true, {
+      preferPublicWisp: hostedOnHf && tlsFailure,
+      preferUnix: tlsFailure,
+    });
     lastTransportSelection = selected;
     console.log("Transport recovered:", selected.transportPath, selected.wsUrl);
     return true;
@@ -310,7 +327,10 @@ function installAutoRecoveryHooks() {
     /bare-mux/i.test(message) ||
     /ping response/i.test(message) ||
     /port is dead/i.test(message) ||
-    /transport verification failed/i.test(message);
+    /transport verification failed/i.test(message) ||
+    /tls handshake eof/i.test(message) ||
+    /unexpectedeof/i.test(message) ||
+    /hyper client/i.test(message);
 
   window.addEventListener("error", (event) => {
     const message = `${event?.message || ""} ${event?.error?.message || ""}`.toLowerCase();
