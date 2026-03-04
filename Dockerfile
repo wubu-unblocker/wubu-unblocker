@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="Wubu Unblocker" \
-      org.opencontainers.image.description="Science for Kids - Web Proxy Service" \
+      org.opencontainers.image.description="Educational web app" \
       org.opencontainers.image.version="1.0.0"
 
 WORKDIR /workspace
@@ -29,19 +29,17 @@ ENV NODE_ENV=production \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
 
-# HF zip deploy support:
-# If app.zip exists, extract it; otherwise use repository contents directly.
-COPY . /workspace
-RUN if [ -f /workspace/app.zip ]; then \
-      mkdir -p /app ; \
-      unzip -q /workspace/app.zip -d /app ; \
-      rc=$$? ; \
-      if [ $$rc -ne 0 ] && [ $$rc -ne 1 ]; then exit $$rc; fi ; \
-    else \
-      mkdir -p /app && cp -a /workspace/. /app ; \
-    fi
+# Copy only files required for build/runtime.
+COPY package.json package-lock.json ./
+COPY src ./src
+COPY views ./views
+COPY lib ./lib
+COPY scripts ./scripts
+COPY run-command.mjs ./
+COPY config.json ./
+COPY ecosystem.config.js ./
 
-WORKDIR /app
+WORKDIR /workspace
 
 # Normalize shell scripts copied from Windows environments.
 RUN find . -name "*.sh" -type f -exec dos2unix {} \; 2>/dev/null || true

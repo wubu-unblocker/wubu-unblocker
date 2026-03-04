@@ -2,6 +2,7 @@ node_modules
 **/node_modules
 .git
 .git.bak
+.github
 .gitpod.yml
 .vscode
 .gitattributes
@@ -27,3 +28,19 @@ lib/rammerhead/src/client/hammerhead.min.js
 lib/rammerhead/src/client/rammerhead.min.js
 views/archive/gfiles/rarch/roms
 .idea
+*.zip
+*.tar.gz
+*.log
+*.bat
+*.ps1
+test-output.html
+TODO.md
+CONTRIBUTING.md
+README.md
+build-log.txt
+app.json
+temp-test
+GAMESFORCHEATS
+blooket-data
+harvest-cookies.mjs
+wubu-issues-firebase-adminsdk-*.json

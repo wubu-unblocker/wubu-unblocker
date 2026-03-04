@@ -1,8 +1,8 @@
 {
   "name": "wubu-unblocker",
   "version": "1.0.0",
-  "repository": "https://github.com/QuiteAFancyEmerald/Holy-Unblocker",
-  "description": "Wubu Unblocker - A unified web proxy with enhanced Blooket support using Puppeteer streaming, plus Rammerhead/UV/Scramjet for all other sites.",
+  "repository": "https://github.com/wubu-unblocker/wubu-unblocker",
+  "description": "Wubu web application runtime.",
   "main": "src/server.mjs",
   "type": "module",
   "engines": {
@@ -26,11 +26,11 @@
     "deployment": "npm install && npm run build && node src/server.mjs"
   },
   "keywords": [
-    "blooket",
-    "proxy",
+    "webapp",
+    "node",
     "puppeteer",
-    "unblocker",
-    "node.js"
+    "fastify",
+    "browser"
   ],
   "author": "Titanium Network",
   "license": "GNU AFFERO",
