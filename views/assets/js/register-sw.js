@@ -21,8 +21,8 @@ const transports = {
   unix: "{{route}}{{/libcurl/index.mjs}}",
 };
 
-const defaultTransport = "epoch";
 const hostedOnHf = /\.hf\.space$/i.test(location.hostname);
+const defaultTransport = hostedOnHf ? "unix" : "epoch";
 const defaultWisp = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "{{route}}{{/wisp/}}";
 const fallbackWisp = "wss://wisp.mercurywork.shop/";
 const scramPrefix = "{{route}}{{/scram/network/}}";
@@ -48,10 +48,8 @@ function makeWispCandidates(preferPublic = false) {
   if (storedPublic === true) return dedupe([fallbackWisp, localWisp, localCron]);
   if (storedPublic === false) return dedupe([localWisp, localCron, fallbackWisp]);
 
-  // On HF, local Wisp egress can intermittently fail TLS handshakes to some sites.
-  // Allow recovery flow to prefer public Wisp first.
-  if (hostedOnHf && preferPublic) return dedupe([fallbackWisp, localWisp, localCron]);
-  if (hostedOnHf) return dedupe([localWisp, localCron, fallbackWisp]);
+  // On HF, prefer public Wisp by default to avoid local egress TLS EOF issues.
+  if (hostedOnHf) return dedupe([fallbackWisp, localWisp, localCron]);
   return dedupe([localWisp, localCron, fallbackWisp]);
 }
 
@@ -118,17 +116,16 @@ function makeTransportCandidates(preferUnix = false) {
     if (!list.find((entry) => entry.mode === mode)) list.push({ mode, transportPath });
   };
 
-  // On HF, libcurl frequently fails TLS handshakes. Bias toward epoxy.
+  // On HF, epoxy can fail TLS handshakes for some targets. Try unix first.
   if (hostedOnHf) {
+    pushMode(configured);
     if (preferUnix) {
       pushMode("unix");
       pushMode("epoch");
     } else {
-      pushMode("epoch");
       pushMode("unix");
+      pushMode("epoch");
     }
-    // Keep explicit preference in front when user picked one in settings.
-    pushMode(configured);
   } else {
     pushMode(configured);
     pushMode(defaultTransport);
