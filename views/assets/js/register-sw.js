@@ -3,6 +3,7 @@
 
 const swAllowedHostnames = ["localhost", "127.0.0.1"];
 const storageId = "{{hu-lts}}-storage";
+const transportCacheId = "{{hu-lts}}-transport-cache";
 
 const getStorage = () => {
   try {
@@ -13,6 +14,23 @@ const getStorage = () => {
 };
 
 const readStorage = (name) => getStorage()[name];
+
+const readTransportCache = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(transportCacheId));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeTransportCache = (value) => {
+  try {
+    localStorage.setItem(transportCacheId, JSON.stringify(value));
+  } catch {
+    // ignore storage failures
+  }
+};
 
 const transports = {
   epoxy: "{{route}}{{/epoxy/index.mjs}}",
@@ -53,7 +71,7 @@ function makeWispCandidates(preferPublic = false) {
   return dedupe([localWisp, localCron, fallbackWisp]);
 }
 
-function probeWsReachable(wsUrl, timeoutMs = hostedOnHf ? 2500 : 1800) {
+function probeWsReachable(wsUrl, timeoutMs = hostedOnHf ? 900 : 1300) {
   return new Promise((resolve) => {
     let settled = false;
     let timer = null;
@@ -98,7 +116,13 @@ async function getOrderedWispCandidates(forceRefresh = false, preferPublic = fal
   const unreachable = probes.filter((entry) => !entry.reachable).map((entry) => entry.wsUrl);
 
   if (reachable.length) {
-    cachedWispCandidates = [...reachable, ...unreachable];
+    const preferredWs = String(readTransportCache()?.wsUrl || "");
+    const ordered = [...reachable, ...unreachable];
+    if (preferredWs && ordered.includes(preferredWs)) {
+      cachedWispCandidates = [preferredWs, ...ordered.filter((u) => u !== preferredWs)];
+      return cachedWispCandidates;
+    }
+    cachedWispCandidates = ordered;
     return cachedWispCandidates;
   }
 
@@ -109,6 +133,7 @@ async function getOrderedWispCandidates(forceRefresh = false, preferPublic = fal
 
 function makeTransportCandidates(preferUnix = false) {
   const configured = readStorage("Transport");
+  const cachedMode = String(readTransportCache()?.mode || "");
   const list = [];
   const pushMode = (mode) => {
     const transportPath = transports[mode];
@@ -116,15 +141,17 @@ function makeTransportCandidates(preferUnix = false) {
     if (!list.find((entry) => entry.mode === mode)) list.push({ mode, transportPath });
   };
 
-  // On HF, epoxy can fail TLS handshakes for some targets. Try unix first.
+  if (cachedMode) pushMode(cachedMode);
+
+  // On HF, choose order based on observed error mode.
   if (hostedOnHf) {
     pushMode(configured);
     if (preferUnix) {
       pushMode("unix");
       pushMode("epoch");
     } else {
-      pushMode("unix");
       pushMode("epoch");
+      pushMode("unix");
     }
   } else {
     pushMode(configured);
@@ -136,12 +163,18 @@ function makeTransportCandidates(preferUnix = false) {
   return list;
 }
 
-async function verifyTransport(connection) {
-  // BareMux performs a ping on getTransport(); this catches dead SharedWorker ports
-  // before users hit a site and get random 500s.
-  const transportPath = await connection.getTransport();
-  if (!transportPath) throw new Error("Transport verification failed.");
-  return transportPath;
+function prioritizeWsCandidates(candidates, options = {}) {
+  const ordered = [...candidates];
+  if (options.preferPublicWisp && ordered.includes(fallbackWisp)) {
+    return [fallbackWisp, ...ordered.filter((u) => u !== fallbackWisp)];
+  }
+
+  const preferredWs = String(readTransportCache()?.wsUrl || "");
+  if (preferredWs && ordered.includes(preferredWs)) {
+    return [preferredWs, ...ordered.filter((u) => u !== preferredWs)];
+  }
+
+  return ordered;
 }
 
 async function setBestTransport(forceWispRefresh = false, options = {}) {
@@ -153,10 +186,11 @@ async function setBestTransport(forceWispRefresh = false, options = {}) {
   localStorage.setItem("bare-mux-path", workerPath);
 
   let connection = new BareMux.BareMuxConnection(workerPath);
-  const wispCandidates = await getOrderedWispCandidates(
+  const rawWispCandidates = await getOrderedWispCandidates(
     forceWispRefresh,
     Boolean(options.preferPublicWisp)
   );
+  const wispCandidates = prioritizeWsCandidates(rawWispCandidates, options);
   const transportCandidates = makeTransportCandidates(Boolean(options.preferUnix));
 
   let lastErr = null;
@@ -166,6 +200,7 @@ async function setBestTransport(forceWispRefresh = false, options = {}) {
         // Support both option names used across bare transports.
         await connection.setTransport(transportPath, [{ websocket: wsUrl, wisp: wsUrl }]);
         await verifyTransport(connection);
+        writeTransportCache({ mode, transportPath, wsUrl, ts: Date.now() });
         return { mode, transportPath, wsUrl, workerPath };
       } catch (e) {
         lastErr = e;
@@ -184,13 +219,17 @@ async function recoverTransport(reason = "unknown") {
   try {
     console.warn("Attempting transport recovery. Reason:", reason);
     const reasonText = String(reason || "").toLowerCase();
+    const sslConnectError =
+      reasonText.includes("ssl connect error") ||
+      reasonText.includes("error code 35");
     const tlsFailure =
       reasonText.includes("tls handshake eof") ||
       reasonText.includes("unexpectedeof") ||
       reasonText.includes("hyper client");
     const selected = await setBestTransport(true, {
-      preferPublicWisp: hostedOnHf && tlsFailure,
-      preferUnix: tlsFailure,
+      preferPublicWisp: hostedOnHf && (tlsFailure || sslConnectError),
+      // TLS EOF usually means epoxy failed; SSL code 35 usually means libcurl failed.
+      preferUnix: tlsFailure && !sslConnectError,
     });
     lastTransportSelection = selected;
     console.log("Transport recovered:", selected.transportPath, selected.wsUrl);
@@ -202,6 +241,51 @@ async function recoverTransport(reason = "unknown") {
     recoveringTransport = false;
   }
 }
+
+async function verifyTransport(connection) {
+  // BareMux performs a ping on getTransport(); this catches dead SharedWorker ports
+  // before users hit a site and get random 500s.
+  const transportPath = await connection.getTransport();
+  if (!transportPath) throw new Error("Transport verification failed.");
+  return transportPath;
+}
+
+function installAutoRecoveryHooks() {
+  const shouldRecover = (message) =>
+    /bare-mux/i.test(message) ||
+    /ping response/i.test(message) ||
+    /port is dead/i.test(message) ||
+    /transport verification failed/i.test(message) ||
+    /ssl connect error/i.test(message) ||
+    /error code 35/i.test(message) ||
+    /tls handshake eof/i.test(message) ||
+    /unexpectedeof/i.test(message) ||
+    /hyper client/i.test(message);
+
+  window.addEventListener("error", (event) => {
+    const message = `${event?.message || ""} ${event?.error?.message || ""}`.toLowerCase();
+    if (shouldRecover(message)) recoverTransport(message);
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const message = `${event?.reason?.message || event?.reason || ""}`.toLowerCase();
+    if (shouldRecover(message)) recoverTransport(message);
+  });
+
+  // Lightweight periodic health check to heal stale/dead worker ports automatically.
+  setInterval(async () => {
+    if (!lastTransportSelection || recoveringTransport) return;
+    try {
+      const connection = new BareMux.BareMuxConnection(lastTransportSelection.workerPath);
+      await verifyTransport(connection);
+    } catch (e) {
+      recoverTransport(`periodic-check: ${e?.message || e}`);
+    }
+  }, hostedOnHf ? 10000 : 15000);
+}
+
+installAutoRecoveryHooks();
+window.proxyReady = initialize();
 
 function deleteIndexedDb(name) {
   return new Promise((resolve) => {
@@ -319,37 +403,3 @@ async function initialize() {
   }
 }
 
-function installAutoRecoveryHooks() {
-  const shouldRecover = (message) =>
-    /bare-mux/i.test(message) ||
-    /ping response/i.test(message) ||
-    /port is dead/i.test(message) ||
-    /transport verification failed/i.test(message) ||
-    /tls handshake eof/i.test(message) ||
-    /unexpectedeof/i.test(message) ||
-    /hyper client/i.test(message);
-
-  window.addEventListener("error", (event) => {
-    const message = `${event?.message || ""} ${event?.error?.message || ""}`.toLowerCase();
-    if (shouldRecover(message)) recoverTransport(message);
-  });
-
-  window.addEventListener("unhandledrejection", (event) => {
-    const message = `${event?.reason?.message || event?.reason || ""}`.toLowerCase();
-    if (shouldRecover(message)) recoverTransport(message);
-  });
-
-  // Lightweight periodic health check to heal stale/dead worker ports automatically.
-  setInterval(async () => {
-    if (!lastTransportSelection || recoveringTransport) return;
-    try {
-      const connection = new BareMux.BareMuxConnection(lastTransportSelection.workerPath);
-      await verifyTransport(connection);
-    } catch (e) {
-      recoverTransport(`periodic-check: ${e?.message || e}`);
-    }
-  }, hostedOnHf ? 10000 : 15000);
-}
-
-installAutoRecoveryHooks();
-window.proxyReady = initialize();
