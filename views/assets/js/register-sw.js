@@ -24,6 +24,20 @@ const readTransportCache = () => {
   }
 };
 
+const getUsableTransportCache = () => {
+  const cached = readTransportCache();
+  if (!cached) return null;
+
+  // On HF, never let a stale local-Wisp/cron choice pin startup to the route
+  // that often fails under school/corporate TLS interception.
+  if (hostedOnHf) {
+    const wsUrl = String(cached.wsUrl || "");
+    if (wsUrl.includes(location.host) || wsUrl.includes("/cron/")) return null;
+  }
+
+  return cached;
+};
+
 const writeTransportCache = (value) => {
   try {
     localStorage.setItem(transportCacheId, JSON.stringify(value));
@@ -116,7 +130,7 @@ async function getOrderedWispCandidates(forceRefresh = false, preferPublic = fal
   const unreachable = probes.filter((entry) => !entry.reachable).map((entry) => entry.wsUrl);
 
   if (reachable.length) {
-    const preferredWs = String(readTransportCache()?.wsUrl || "");
+    const preferredWs = String(getUsableTransportCache()?.wsUrl || "");
     const ordered = [...reachable, ...unreachable];
     if (preferredWs && ordered.includes(preferredWs)) {
       cachedWispCandidates = [preferredWs, ...ordered.filter((u) => u !== preferredWs)];
@@ -133,7 +147,7 @@ async function getOrderedWispCandidates(forceRefresh = false, preferPublic = fal
 
 function makeTransportCandidates(preferUnix = false) {
   const configured = readStorage("Transport");
-  const cachedMode = String(readTransportCache()?.mode || "");
+  const cachedMode = String(getUsableTransportCache()?.mode || "");
   const list = [];
   const pushMode = (mode) => {
     const transportPath = transports[mode];
@@ -150,8 +164,8 @@ function makeTransportCandidates(preferUnix = false) {
       pushMode("unix");
       pushMode("epoch");
     } else {
-      pushMode("epoch");
       pushMode("unix");
+      pushMode("epoch");
     }
   } else {
     pushMode(configured);
@@ -169,7 +183,7 @@ function prioritizeWsCandidates(candidates, options = {}) {
     return [fallbackWisp, ...ordered.filter((u) => u !== fallbackWisp)];
   }
 
-  const preferredWs = String(readTransportCache()?.wsUrl || "");
+  const preferredWs = String(getUsableTransportCache()?.wsUrl || "");
   if (preferredWs && ordered.includes(preferredWs)) {
     return [preferredWs, ...ordered.filter((u) => u !== preferredWs)];
   }
