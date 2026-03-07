@@ -745,6 +745,11 @@ app.get(serverUrl.pathname + 'browsing', (req, reply) => {
   }
 });
 
+// Legacy WuTube alias from the prior bad SEO mapping.
+app.get(serverUrl.pathname + 'wiki', (req, reply) => {
+  reply.redirect(serverUrl.pathname + 'youtube');
+});
+
 // Blooket Loader Endpoint (serves cheat scripts)
 app.get(serverUrl.pathname + 'blooket-loader', (req, reply) => {
   const scriptPath = join(__dirname, '../blooket-cheats/master.js');

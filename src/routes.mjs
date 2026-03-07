@@ -121,7 +121,7 @@ let altPaths = {
   uverror: 'network-error',
   sjerror: 'worker-error',
   rammerhead: 'physics',
-  youtube: 'wiki',
+  youtube: 'youtube',
   apps: 'apps',
   flash: 'whiteboard',
   webretro: 'notebook',
