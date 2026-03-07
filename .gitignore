@@ -2,7 +2,9 @@
 **/blooket-data/
 **/.git/
 **/dist/
+!YouTube-Clone/
 !YouTube-Clone/dist/
+!YouTube-Clone/dist/assets/
 !YouTube-Clone/dist/**
 
 .git.bak/
