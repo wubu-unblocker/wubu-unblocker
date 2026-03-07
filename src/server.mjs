@@ -730,6 +730,45 @@ const wuTubeHomeQueries = [
   { title: 'Build mode', query: 'coding tutorials web development' },
 ];
 
+const wuTubeFallbackSections = [
+  {
+    title: 'Trending now',
+    query: 'trending',
+    videos: [
+      { videoId: 'dQw4w9WgXcQ', title: 'Trending pick', author: { name: 'Featured' } },
+      { videoId: '3JZ_D3ELwOQ', title: 'Music spotlight', author: { name: 'Featured' } },
+      { videoId: 'L_jWHffIx5E', title: 'Throwback stream', author: { name: 'Featured' } },
+    ],
+  },
+  {
+    title: 'Music picks',
+    query: 'music',
+    videos: [
+      { videoId: 'ktvTqknDobU', title: 'Music release radar', author: { name: 'WuTube' } },
+      { videoId: 'OPf0YbXqDm0', title: 'Chart rotation', author: { name: 'WuTube' } },
+      { videoId: 'JGwWNGJdvx8', title: 'Late-night replay', author: { name: 'WuTube' } },
+    ],
+  },
+  {
+    title: 'Gaming live',
+    query: 'gaming',
+    videos: [
+      { videoId: '2Vv-BfVoq4g', title: 'Gaming channel replay', author: { name: 'WuTube' } },
+      { videoId: 'RgKAFK5djSk', title: 'Creator highlight', author: { name: 'WuTube' } },
+      { videoId: 'fRh_vgS2dFE', title: 'Top clips mix', author: { name: 'WuTube' } },
+    ],
+  },
+  {
+    title: 'Build mode',
+    query: 'coding tutorials',
+    videos: [
+      { videoId: '9bZkp7q19f0', title: 'Build session', author: { name: 'WuTube' } },
+      { videoId: '60ItHLz5WEA', title: 'Tutorial playlist', author: { name: 'WuTube' } },
+      { videoId: 'YQHsXMglC9A', title: 'Project breakdown', author: { name: 'WuTube' } },
+    ],
+  },
+];
+
 function normalizeWuTubeVideo(video) {
   return {
     videoId: video.videoId,
@@ -746,6 +785,34 @@ function normalizeWuTubeVideo(video) {
       name: video.author?.name || 'Unknown creator',
       url: video.author?.url || '',
     },
+  };
+}
+
+function withWuTubeDefaults(video) {
+  const normalized = normalizeWuTubeVideo(video);
+  return {
+    ...normalized,
+    videoId: normalized.videoId || 'dQw4w9WgXcQ',
+    url: normalized.url || `https://youtube.com/watch?v=${normalized.videoId || 'dQw4w9WgXcQ'}`,
+    title: normalized.title || 'WuTube video',
+    thumbnail:
+      normalized.thumbnail ||
+      `https://i.ytimg.com/vi/${normalized.videoId || 'dQw4w9WgXcQ'}/hqdefault.jpg`,
+    description: normalized.description || '',
+    author: {
+      name: normalized.author?.name || 'WuTube',
+      url: normalized.author?.url || '',
+    },
+  };
+}
+
+function fallbackSection(section) {
+  const match = wuTubeFallbackSections.find((item) => item.title === section.title);
+  if (!match) return { ...section, videos: [] };
+  return {
+    title: match.title,
+    query: match.query,
+    videos: match.videos.map(withWuTubeDefaults),
   };
 }
 
@@ -796,19 +863,25 @@ app.get(serverUrl.pathname + 'youtube/vite.svg', (req, reply) => {
 });
 
 app.get(serverUrl.pathname + 'youtube/api/home', async (req, reply) => {
-  try {
-    const sections = await Promise.all(
-      wuTubeHomeQueries.map(async (section) => ({
-        ...section,
-        videos: await searchWuTubeVideos(section.query, 8),
-      }))
-    );
+  const settled = await Promise.allSettled(
+    wuTubeHomeQueries.map(async (section) => ({
+      ...section,
+      videos: await searchWuTubeVideos(section.query, 8),
+    }))
+  );
 
-    return reply.send({ sections });
-  } catch (e) {
-    console.error('[WuTube] Home feed failed:', e);
-    return reply.code(500).send({ error: 'Failed to load home feed.' });
+  const sections = settled.map((result, index) =>
+    result.status === 'fulfilled' ? result.value : fallbackSection(wuTubeHomeQueries[index])
+  );
+  const degraded = settled.some((result) => result.status === 'rejected');
+  if (degraded) {
+    console.error(
+      '[WuTube] Home feed degraded:',
+      settled.filter((result) => result.status === 'rejected').map((result) => result.reason)
+    );
   }
+
+  return reply.send({ sections, degraded });
 });
 
 app.get(serverUrl.pathname + 'youtube/api/search', async (req, reply) => {
@@ -817,10 +890,10 @@ app.get(serverUrl.pathname + 'youtube/api/search', async (req, reply) => {
 
   try {
     const videos = await searchWuTubeVideos(query, 18);
-    return reply.send({ query, videos });
+    return reply.send({ query, videos, degraded: false });
   } catch (e) {
     console.error('[WuTube] Search failed:', e);
-    return reply.code(500).send({ error: 'Search failed.' });
+    return reply.send({ query, videos: [], degraded: true, error: 'Search failed.' });
   }
 });
 
@@ -832,10 +905,23 @@ app.get(serverUrl.pathname + 'youtube/api/video/:id', async (req, reply) => {
       (candidate) => candidate.videoId !== video.videoId
     );
 
-    return reply.send({ video, related });
+    return reply.send({ video, related, degraded: false });
   } catch (e) {
     console.error('[WuTube] Video load failed:', e);
-    return reply.code(500).send({ error: 'Video load failed.' });
+    const video = withWuTubeDefaults({
+      videoId: req.params.id,
+      title: 'WuTube fallback player',
+      url: `https://youtube.com/watch?v=${req.params.id}`,
+      timestamp: 'Live',
+      author: { name: 'WuTube' },
+      description: 'Direct playback is available, but metadata could not be loaded right now.',
+    });
+    const related = wuTubeFallbackSections
+      .flatMap((section) => section.videos)
+      .filter((candidate) => candidate.videoId !== req.params.id)
+      .slice(0, 8)
+      .map(withWuTubeDefaults);
+    return reply.send({ video, related, degraded: true });
   }
 });
 

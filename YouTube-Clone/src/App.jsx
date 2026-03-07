@@ -209,6 +209,7 @@ function HomePage() {
     sections: [],
     loading: true,
     error: '',
+    degraded: false,
   })
 
   useEffect(() => {
@@ -222,6 +223,7 @@ function HomePage() {
             sections: data.sections ?? [],
             loading: false,
             error: '',
+            degraded: Boolean(data.degraded),
           })
         }
       } catch {
@@ -230,6 +232,7 @@ function HomePage() {
             sections: [],
             loading: false,
             error: 'WuTube could not load the home feed.',
+            degraded: false,
           })
         }
       }
@@ -246,11 +249,11 @@ function HomePage() {
     <div className="page">
       <section className="hero">
         <div>
-          <p className="eyebrow">Actual YouTube videos, WuTube interface</p>
-          <h1>Search, watch, save, and revisit real YouTube content for free.</h1>
+          <p className="eyebrow">Wubu video layer</p>
+          <h1>WuTube, but inside the same visual system.</h1>
           <p className="hero-copy">
-            WuTube pulls in actual YouTube videos, wraps them in a fast clone interface, and gives you a
-            useful personal library without requiring a paid API.
+            Search, watch, save, and reopen YouTube videos without dropping into the generic proxy screen.
+            The feed stays usable even when live metadata is acting up.
           </p>
         </div>
         <div className="hero-grid">
@@ -265,6 +268,10 @@ function HomePage() {
           ))}
         </div>
       </section>
+
+      {state.degraded ? (
+        <div className="status-banner">WuTube is showing fallback feed data while live lookups recover.</div>
+      ) : null}
 
       {state.loading ? <LoadingState message="Loading the WuTube home feed..." /> : null}
       {state.error ? <ErrorState message={state.error} /> : null}
@@ -291,6 +298,7 @@ function SearchPage() {
     videos: [],
     loading: Boolean(query),
     error: '',
+    degraded: false,
   })
 
   useEffect(() => {
@@ -307,7 +315,8 @@ function SearchPage() {
           setState({
             videos: data.videos ?? [],
             loading: false,
-            error: '',
+            error: data.error && !(data.videos ?? []).length ? data.error : '',
+            degraded: Boolean(data.degraded),
           })
         }
       } catch {
@@ -316,6 +325,7 @@ function SearchPage() {
             videos: [],
             loading: false,
             error: 'Search failed. Try another phrase.',
+            degraded: false,
           })
         }
       }
@@ -339,9 +349,15 @@ function SearchPage() {
       </div>
 
       {!query ? <EmptyState message="Use the search bar to find actual YouTube videos." /> : null}
+      {state.degraded ? (
+        <div className="status-banner">Live search is degraded right now. Results may be limited for this query.</div>
+      ) : null}
       {state.loading ? <LoadingState message={`Searching YouTube for "${query}"...`} /> : null}
       {state.error ? <ErrorState message={state.error} /> : null}
-      {!state.loading && !state.error && query ? <VideoList videos={state.videos} /> : null}
+      {!state.loading && !state.error && query && state.videos.length ? <VideoList videos={state.videos} /> : null}
+      {!state.loading && !state.error && query && !state.videos.length ? (
+        <EmptyState message="No videos came back for that search yet." />
+      ) : null}
     </div>
   )
 }
@@ -354,6 +370,7 @@ function WatchPage({ library }) {
     payload: null,
     loading: true,
     error: '',
+    degraded: false,
   })
 
   useEffect(() => {
@@ -367,6 +384,7 @@ function WatchPage({ library }) {
             payload: data,
             loading: false,
             error: '',
+            degraded: Boolean(data.degraded),
           })
           saveHistory(data.video)
         }
@@ -376,6 +394,7 @@ function WatchPage({ library }) {
             payload: null,
             loading: false,
             error: 'This video could not be loaded right now.',
+            degraded: false,
           })
         }
       }
@@ -407,6 +426,9 @@ function WatchPage({ library }) {
           />
         </div>
         <div className="watch-meta">
+          {state.degraded ? (
+            <div className="status-banner">Playback is available, but metadata is coming from WuTube fallback mode.</div>
+          ) : null}
           <p className="eyebrow">{video.author.name}</p>
           <h1>{video.title}</h1>
           <div className="watch-stats">
@@ -497,7 +519,7 @@ function VideoGrid({ videos }) {
             <h3>{video.title}</h3>
             <p>{video.author.name}</p>
             <p>
-              {formatNumber(video.views)} views · {video.ago || 'New'}
+              {formatNumber(video.views)} views - {video.ago || 'New'}
             </p>
           </div>
         </Link>
@@ -519,7 +541,7 @@ function VideoList({ videos, compact = false }) {
             <h3>{video.title}</h3>
             <p>{video.author.name}</p>
             <p>
-              {formatNumber(video.views)} views · {video.ago || 'New'}
+              {formatNumber(video.views)} views - {video.ago || 'New'}
             </p>
           </div>
         </Link>
