@@ -47,6 +47,9 @@ RUN find . -name "*.sh" -type f -exec dos2unix {} \; 2>/dev/null || true
 # Install deps, build dist assets, then drop dev deps.
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 RUN npm run build
+RUN if [ -f YouTube-Clone/package-lock.json ]; then npm --prefix YouTube-Clone ci; else npm --prefix YouTube-Clone install; fi
+RUN npm --prefix YouTube-Clone run build
+RUN rm -rf YouTube-Clone/node_modules
 RUN npm prune --omit=dev && npm cache clean --force
 
 EXPOSE 7860
