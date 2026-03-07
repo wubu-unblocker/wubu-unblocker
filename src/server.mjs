@@ -5,6 +5,7 @@ import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import admin from 'firebase-admin';
+import yts from 'yt-search';
 import {
   config,
   serverUrl,
@@ -20,6 +21,9 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const wuTubeDistRoot = join(__dirname, '../YouTube-Clone/dist');
+const wuTubeIndexPath = join(wuTubeDistRoot, 'index.html');
+const wuTubeViteIconPath = join(wuTubeDistRoot, 'vite.svg');
 
 /* Record the server's location as a URL object, including its host and port.
  * The host can be modified at /src/config.json, whereas the ports can be modified
@@ -675,8 +679,9 @@ if (config.disguiseFiles) {
     'baremux',
     'wisp',
     'chii',
+    'youtube',
   ].map((dir) => getAltPrefix(dir, serverUrl.pathname).slice(1, -1)),
-    exemptPages = ['login', 'test-shutdown', 'favicon.ico', 'blooket', 'blooket-loader', 'blooket-ws', 'home', 'games'];
+    exemptPages = ['login', 'test-shutdown', 'favicon.ico', 'blooket', 'blooket-loader', 'blooket-ws', 'home', 'games', 'youtube', 'wiki'];
 
   // Always exempt API endpoints from the disguise/loader behavior.
   exemptDirs.push('api');
@@ -718,6 +723,41 @@ if (config.disguiseFiles) {
 // WUBU CUSTOM ROUTES
 // ========================
 
+const wuTubeHomeQueries = [
+  { title: 'Trending now', query: 'trending videos today' },
+  { title: 'Music picks', query: 'official music video new releases' },
+  { title: 'Gaming live', query: 'gaming highlights 2026' },
+  { title: 'Build mode', query: 'coding tutorials web development' },
+];
+
+function normalizeWuTubeVideo(video) {
+  return {
+    videoId: video.videoId,
+    url: video.url,
+    title: video.title,
+    description: video.description,
+    thumbnail: video.thumbnail || video.image,
+    views: video.views ?? 0,
+    timestamp: video.timestamp || 'Live',
+    seconds: video.seconds ?? 0,
+    ago: video.ago,
+    uploadDate: video.uploadDate,
+    author: {
+      name: video.author?.name || 'Unknown creator',
+      url: video.author?.url || '',
+    },
+  };
+}
+
+async function searchWuTubeVideos(query, limit = 12) {
+  const result = await yts(query);
+  return result.videos.slice(0, limit).map(normalizeWuTubeVideo);
+}
+
+function sendWuTubeIndex(reply) {
+  reply.type('text/html').send(readFileSync(wuTubeIndexPath, 'utf-8'));
+}
+
 // Root route - Redirect to /stuff
 if (serverUrl.pathname === '/') {
   app.get('/', (req, reply) => {
@@ -743,6 +783,68 @@ app.get(serverUrl.pathname + 'browsing', (req, reply) => {
   } catch (e) {
     reply.code(404).send('Browsing page not found');
   }
+});
+
+app.register(fastifyStatic, {
+  root: join(wuTubeDistRoot, 'assets'),
+  prefix: serverUrl.pathname + 'youtube/assets/',
+  decorateReply: false,
+});
+
+app.get(serverUrl.pathname + 'youtube/vite.svg', (req, reply) => {
+  reply.type('image/svg+xml').send(readFileSync(wuTubeViteIconPath, 'utf-8'));
+});
+
+app.get(serverUrl.pathname + 'youtube/api/home', async (req, reply) => {
+  try {
+    const sections = await Promise.all(
+      wuTubeHomeQueries.map(async (section) => ({
+        ...section,
+        videos: await searchWuTubeVideos(section.query, 8),
+      }))
+    );
+
+    return reply.send({ sections });
+  } catch (e) {
+    console.error('[WuTube] Home feed failed:', e);
+    return reply.code(500).send({ error: 'Failed to load home feed.' });
+  }
+});
+
+app.get(serverUrl.pathname + 'youtube/api/search', async (req, reply) => {
+  const query = String(req.query?.q || '').trim();
+  if (!query) return reply.code(400).send({ error: 'Missing query.' });
+
+  try {
+    const videos = await searchWuTubeVideos(query, 18);
+    return reply.send({ query, videos });
+  } catch (e) {
+    console.error('[WuTube] Search failed:', e);
+    return reply.code(500).send({ error: 'Search failed.' });
+  }
+});
+
+app.get(serverUrl.pathname + 'youtube/api/video/:id', async (req, reply) => {
+  try {
+    const video = normalizeWuTubeVideo(await yts({ videoId: req.params.id }));
+    const relatedQuery = `${video.author.name} ${video.title}`;
+    const related = (await searchWuTubeVideos(relatedQuery, 10)).filter(
+      (candidate) => candidate.videoId !== video.videoId
+    );
+
+    return reply.send({ video, related });
+  } catch (e) {
+    console.error('[WuTube] Video load failed:', e);
+    return reply.code(500).send({ error: 'Video load failed.' });
+  }
+});
+
+app.get(serverUrl.pathname + 'youtube', (req, reply) => {
+  sendWuTubeIndex(reply);
+});
+
+app.get(serverUrl.pathname + 'youtube/*', (req, reply) => {
+  sendWuTubeIndex(reply);
 });
 
 // Legacy WuTube alias from the prior bad SEO mapping.
@@ -969,6 +1071,8 @@ if (serverUrl.pathname === '/') {
     getAltPrefix('wisp', serverUrl.pathname),
     serverUrl.pathname + 'assets/',
     serverUrl.pathname + 'api/',
+    serverUrl.pathname + 'youtube/assets/',
+    serverUrl.pathname + 'youtube/api/',
     serverUrl.pathname + 'scripts/',
     '/GAMESFORCHEATS/',
   ];
