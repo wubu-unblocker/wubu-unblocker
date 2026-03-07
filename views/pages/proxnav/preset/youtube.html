@@ -24,50 +24,48 @@
     <style>
       body {
         min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(157, 78, 221, 0.12), transparent 24%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 243, 255, 0.94));
+      }
+
+      :root[data-theme="dark"] body {
+        background:
+          radial-gradient(circle at top left, rgba(157, 78, 221, 0.18), transparent 22%),
+          linear-gradient(180deg, rgba(12, 14, 21, 0.98), rgba(18, 20, 28, 0.95));
       }
 
       .wutube-shell {
-        max-width: 1220px;
+        max-width: 1320px;
         margin: 0 auto;
-        padding: 56px 24px 72px;
+        padding: 44px 32px 88px;
       }
 
       .wutube-hero {
-        position: relative;
-        overflow: hidden;
-        border: 1px solid var(--border);
-        border-radius: 28px;
+        padding: 28px 0 34px;
+        border-bottom: 1px solid rgba(157, 78, 221, 0.14);
         background:
-          radial-gradient(circle at top left, rgba(138, 43, 226, 0.22), transparent 36%),
-          radial-gradient(circle at bottom right, rgba(157, 78, 221, 0.16), transparent 34%),
-          linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
-        padding: 36px;
+          linear-gradient(90deg, rgba(183, 123, 255, 0.18), transparent 45%),
+          linear-gradient(180deg, transparent, rgba(183, 123, 255, 0.04));
       }
 
       :root[data-theme="dark"] .wutube-hero {
         background:
-          radial-gradient(circle at top left, rgba(157, 78, 221, 0.28), transparent 38%),
-          radial-gradient(circle at bottom right, rgba(91, 33, 182, 0.2), transparent 32%),
-          linear-gradient(135deg, rgba(18, 20, 28, 0.96), rgba(18, 20, 28, 0.9));
+          linear-gradient(90deg, rgba(183, 123, 255, 0.14), transparent 42%),
+          linear-gradient(180deg, transparent, rgba(183, 123, 255, 0.06));
       }
 
       .wutube-pill {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 16px;
-        border-radius: 999px;
-        border: 1px solid rgba(157, 78, 221, 0.2);
-        background: rgba(255, 255, 255, 0.6);
+        padding: 0 0 12px;
+        border-bottom: 2px solid rgba(157, 78, 221, 0.22);
         color: var(--text-secondary);
-        font-size: 0.92rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
+        font-size: 0.9rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-      }
-
-      :root[data-theme="dark"] .wutube-pill {
-        background: rgba(255, 255, 255, 0.04);
       }
 
       .wutube-pill i {
@@ -75,59 +73,61 @@
       }
 
       .wutube-title {
-        margin-top: 18px;
-        font-size: clamp(2.6rem, 5vw, 4.5rem);
-        line-height: 0.95;
-        letter-spacing: -0.04em;
-        font-weight: 800;
+        max-width: 980px;
+        margin-top: 26px;
+        font-size: clamp(4.4rem, 8vw, 7.8rem);
+        line-height: 0.88;
+        letter-spacing: -0.05em;
+        font-weight: 900;
       }
 
       .wutube-title span {
-        display: block;
         color: var(--accent);
       }
 
       .wutube-copy {
-        max-width: 700px;
-        margin-top: 18px;
+        max-width: 860px;
+        margin-top: 24px;
         color: var(--text-secondary);
-        font-size: 1.08rem;
+        font-size: 1.26rem;
+        line-height: 1.65;
       }
 
-      .wutube-search {
+      .wutube-command {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        gap: 12px;
-        margin-top: 28px;
+        gap: 0;
+        align-items: stretch;
+        margin-top: 36px;
+        border-top: 1px solid rgba(157, 78, 221, 0.14);
+        border-bottom: 1px solid rgba(157, 78, 221, 0.14);
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      :root[data-theme="dark"] .wutube-command {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .wutube-command-input {
+        padding-left: 2px;
       }
 
       .wutube-input {
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.78);
-        padding: 18px 20px;
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 24px 0;
         color: var(--text);
         font: inherit;
-        font-size: 1rem;
+        font-size: 1.24rem;
         outline: none;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
-      }
-
-      .wutube-input:focus {
-        border-color: rgba(157, 78, 221, 0.55);
-        box-shadow: 0 0 0 3px rgba(138, 43, 226, 0.1);
-      }
-
-      :root[data-theme="dark"] .wutube-input {
-        background: rgba(255, 255, 255, 0.04);
-        box-shadow: none;
       }
 
       .wutube-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 16px;
+        gap: 18px;
+        margin-top: 18px;
       }
 
       .wutube-btn {
@@ -135,131 +135,137 @@
         align-items: center;
         justify-content: center;
         gap: 10px;
-        padding: 15px 22px;
-        border-radius: 18px;
-        border: 1px solid var(--border);
-        background: var(--bg-secondary);
+        padding: 18px 24px;
+        border: none;
+        border-radius: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
         color: var(--text);
         font: inherit;
         font-weight: 600;
         cursor: pointer;
         text-decoration: none;
-        transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+        transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
       }
 
       .wutube-btn:hover {
         transform: translateY(-2px);
         border-color: rgba(157, 78, 221, 0.35);
-        background: rgba(157, 78, 221, 0.06);
+        color: var(--accent);
       }
 
       .wutube-btn.primary {
+        min-width: 240px;
         background: linear-gradient(135deg, #ff4d6d, #a855f7);
         color: #fff;
-        border-color: transparent;
+        border-bottom: none;
       }
 
       .wutube-meta {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
-        margin-top: 30px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0;
+        margin-top: 28px;
+        border-top: 1px solid rgba(157, 78, 221, 0.14);
       }
 
       .wutube-stat {
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        padding: 18px;
-        background: rgba(255, 255, 255, 0.46);
+        flex: 1 1 260px;
+        min-height: 156px;
+        padding: 24px 28px 18px 0;
+        margin-right: 28px;
+        border-right: 1px solid rgba(157, 78, 221, 0.14);
       }
 
-      :root[data-theme="dark"] .wutube-stat {
-        background: rgba(255, 255, 255, 0.04);
+      .wutube-stat:last-child {
+        border-right: none;
+        margin-right: 0;
       }
 
       .wutube-stat strong {
         display: block;
-        font-size: 1.2rem;
-        margin-bottom: 6px;
+        margin-bottom: 10px;
+        font-size: 1.55rem;
+        line-height: 1.02;
+      }
+
+      .wutube-stat span {
+        color: var(--text-secondary);
+        line-height: 1.65;
       }
 
       .wutube-grid {
         display: grid;
-        grid-template-columns: 1.3fr 0.9fr;
-        gap: 24px;
-        margin-top: 28px;
-      }
-
-      .wutube-panel {
-        border: 1px solid var(--border);
-        border-radius: 24px;
-        padding: 26px;
-        background: var(--card-bg);
-        backdrop-filter: blur(12px);
+        grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+        gap: 46px;
+        margin-top: 50px;
       }
 
       .wutube-panel h2 {
-        font-size: 1.4rem;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
+        font-size: 2.15rem;
+        line-height: 0.94;
       }
 
       .wutube-panel p {
         color: var(--text-secondary);
+        font-size: 1.02rem;
+        line-height: 1.72;
+      }
+
+      .wutube-section-kicker {
+        display: inline-block;
+        margin-bottom: 12px;
+        color: var(--accent);
+        font-size: 0.86rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
       .wutube-launch-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-        margin-top: 18px;
+        gap: 0 30px;
+        margin-top: 28px;
       }
 
       .wutube-tile {
         display: block;
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        padding: 20px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent);
+        padding: 24px 0 22px;
+        border-bottom: 1px solid rgba(157, 78, 221, 0.14);
         color: inherit;
         text-decoration: none;
-        transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+        transition: transform 0.2s ease, color 0.2s ease;
       }
 
       .wutube-tile:hover {
         transform: translateY(-2px);
-        border-color: rgba(157, 78, 221, 0.35);
-        background: linear-gradient(180deg, rgba(157, 78, 221, 0.08), transparent);
+        color: var(--accent);
       }
 
       .wutube-tile i {
         display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 44px;
-        height: 44px;
         margin-bottom: 14px;
-        border-radius: 14px;
-        background: rgba(157, 78, 221, 0.12);
         color: var(--accent);
+        font-size: 1.08rem;
       }
 
       .wutube-tile h3 {
-        font-size: 1.05rem;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
+        font-size: 1.34rem;
       }
 
       .wutube-list {
-        margin-top: 18px;
-        display: grid;
-        gap: 12px;
+        margin-top: 28px;
       }
 
       .wutube-list-item {
         display: flex;
         align-items: flex-start;
-        gap: 12px;
-        padding: 14px 0;
-        border-top: 1px solid var(--border);
+        gap: 18px;
+        padding: 24px 0;
+        border-top: 1px solid rgba(157, 78, 221, 0.14);
       }
 
       .wutube-list-item:first-child {
@@ -268,14 +274,18 @@
       }
 
       .wutube-list-item i {
-        margin-top: 2px;
+        margin-top: 4px;
         color: var(--accent);
+        font-size: 1.08rem;
       }
 
       .wutube-footnote {
-        margin-top: 16px;
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(157, 78, 221, 0.14);
         color: var(--text-secondary);
-        font-size: 0.95rem;
+        font-size: 1rem;
+        line-height: 1.65;
       }
 
       @media (max-width: 920px) {
@@ -283,24 +293,47 @@
           grid-template-columns: 1fr;
         }
 
-        .wutube-meta {
-          grid-template-columns: 1fr;
+        .wutube-stat {
+          flex-basis: 100%;
+          margin-right: 0;
+          border-right: none;
+          border-bottom: 1px solid rgba(157, 78, 221, 0.14);
+        }
+
+        .wutube-stat:last-child {
+          border-bottom: none;
         }
       }
 
       @media (max-width: 640px) {
         .wutube-shell {
-          padding: 32px 16px 48px;
+          padding: 28px 18px 58px;
         }
 
-        .wutube-hero,
-        .wutube-panel {
-          padding: 22px;
-          border-radius: 22px;
+        .wutube-title {
+          font-size: 3.5rem;
         }
 
-        .wutube-search {
+        .wutube-copy {
+          font-size: 1.08rem;
+        }
+
+        .wutube-command {
           grid-template-columns: 1fr;
+        }
+
+        .wutube-command-input {
+          padding-left: 0;
+        }
+
+        .wutube-input {
+          padding: 20px 0 16px;
+          font-size: 1.08rem;
+        }
+
+        .wutube-btn.primary {
+          width: 100%;
+          min-width: 0;
         }
 
         .wutube-launch-grid {
@@ -330,14 +363,16 @@
           {{mask}}{{WuTube is the YouTube front door inside Wubu. Launch videos, channels, playlists, Shorts, and fallback viewers from one place without dropping into the generic proxy page.}}
         </p>
 
-        <div class="wutube-search">
-          <input
-            class="wutube-input"
-            id="wutube-query"
-            type="text"
-            placeholder="Paste a YouTube URL, channel URL, video ID, or search phrase"
-            value="https://youtube.com"
-          />
+        <div class="wutube-command">
+          <div class="wutube-command-input">
+            <input
+              class="wutube-input"
+              id="wutube-query"
+              type="text"
+              placeholder="Paste a YouTube URL, channel URL, video ID, or search phrase"
+              value="https://youtube.com"
+            />
+          </div>
           <button class="wutube-btn primary" id="wutube-browse">
             <i class="fas fa-play"></i>
             {{mask}}{{Open WuTube}}
@@ -381,6 +416,7 @@
 
       <section class="wutube-grid">
         <article class="wutube-panel">
+          <span class="wutube-section-kicker">{{mask}}{{Launch map}}</span>
           <h2>{{mask}}{{Quick routes}}</h2>
           <p>{{mask}}{{Pick a launch mode based on what you already have: a link, a search term, or just a mood.}}</p>
 
@@ -409,6 +445,7 @@
         </article>
 
         <aside class="wutube-panel">
+          <span class="wutube-section-kicker">{{mask}}{{Input rules}}</span>
           <h2>{{mask}}{{How WuTube resolves input}}</h2>
           <div class="wutube-list">
             <div class="wutube-list-item">
