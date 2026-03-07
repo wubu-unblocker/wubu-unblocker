@@ -1,75 +1,619 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <title>{{mask}}{{Holy Unblocker LTS | YouTube Proxy}}</title>
+    <title>{{mask}}{{Wubu | WuTube}}</title>
     {{ifSEO}}{{
     <meta
       name="description"
-      content="Holy Unblocker is a secure web proxy service with support for many sites. Bypass filters and freely enjoy a safer private browsing experience or unblock websites on devices such as Chromebooks and at places like school or work without downloading anything."
+      content="WuTube is Wubu's YouTube-optimized launch page with quick routes for videos, creators, search, and alternative viewers."
     />
     }}
     <!--HEAD-CONTENT-->
-    <script src="https://unpkg.com/tsparticles@3.8.1/tsparticles.bundle.min.js" defer data-module></script>
-    <script src="{{route}}{{/scram/scramjet.all.js}}" defer data-module></script>
-    <script src="{{route}}{{/baremux/index.js}}" defer data-module></script>
-    <script src="{{route}}{{/epoxy/index.js}}" defer data-module></script>
-    <script src="{{route}}{{/uv/uv.bundle.js}}" defer data-module></script>
-    <script src="{{route}}{{/uv/uv.config.js}}" defer data-module></script>
     {{inline}}{{
-    <script src="{{route}}{{/assets/js/register-sw.js}}{{inline}}" defer></script>
+    <script src="{{route}}{{baremux/index.js}}{{inline}}" defer></script>
+    <script src="{{route}}{{scram/scramjet.all.js}}{{inline}}" defer></script>
+    <script src="{{route}}{{assets/js/register-sw.js}}{{inline}}" defer></script>
     }}
-    <script src="https://unpkg.com/@popperjs/core@2" defer data-module></script>
-    <script src="https://unpkg.com/tippy.js@6" defer></script>
-    {{inline}}{{
-    <script src="{{route}}{{assets/js/csel.js}}{{inline}}" defer></script>
-    <script src="{{route}}{{assets/js/common.js}}{{inline}}" defer></script>
-    }}
-  <script>try{if(localStorage.getItem('wubu-theme')==='dark'){document.documentElement.setAttribute('data-theme', 'dark')}}catch(e){}</script>
-</head>
+    <script>
+      try {
+        if (localStorage.getItem('wubu-theme') === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {}
+    </script>
+    <style>
+      body {
+        min-height: 100vh;
+      }
+
+      .wutube-shell {
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 56px 24px 72px;
+      }
+
+      .wutube-hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at top left, rgba(138, 43, 226, 0.22), transparent 36%),
+          radial-gradient(circle at bottom right, rgba(157, 78, 221, 0.16), transparent 34%),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+        box-shadow: var(--shadow-lg);
+        padding: 36px;
+      }
+
+      :root[data-theme="dark"] .wutube-hero {
+        background:
+          radial-gradient(circle at top left, rgba(157, 78, 221, 0.28), transparent 38%),
+          radial-gradient(circle at bottom right, rgba(91, 33, 182, 0.2), transparent 32%),
+          linear-gradient(135deg, rgba(18, 20, 28, 0.96), rgba(18, 20, 28, 0.9));
+      }
+
+      .wutube-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(157, 78, 221, 0.2);
+        background: rgba(255, 255, 255, 0.6);
+        color: var(--text-secondary);
+        font-size: 0.92rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      :root[data-theme="dark"] .wutube-pill {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .wutube-pill i {
+        color: #ff4d6d;
+      }
+
+      .wutube-title {
+        margin-top: 18px;
+        font-size: clamp(2.6rem, 5vw, 4.5rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+        font-weight: 800;
+      }
+
+      .wutube-title span {
+        display: block;
+        color: var(--accent);
+      }
+
+      .wutube-copy {
+        max-width: 700px;
+        margin-top: 18px;
+        color: var(--text-secondary);
+        font-size: 1.08rem;
+      }
+
+      .wutube-search {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .wutube-input {
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.78);
+        padding: 18px 20px;
+        color: var(--text);
+        font: inherit;
+        font-size: 1rem;
+        outline: none;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+
+      .wutube-input:focus {
+        border-color: rgba(157, 78, 221, 0.55);
+        box-shadow: 0 0 0 4px rgba(138, 43, 226, 0.12);
+      }
+
+      :root[data-theme="dark"] .wutube-input {
+        background: rgba(255, 255, 255, 0.04);
+        box-shadow: none;
+      }
+
+      .wutube-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .wutube-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 15px 22px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+        color: var(--text);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+
+      .wutube-btn:hover {
+        transform: translateY(-2px);
+        border-color: rgba(157, 78, 221, 0.35);
+        box-shadow: 0 14px 28px rgba(138, 43, 226, 0.12);
+      }
+
+      .wutube-btn.primary {
+        background: linear-gradient(135deg, #ff4d6d, #a855f7);
+        color: #fff;
+        border-color: transparent;
+      }
+
+      .wutube-meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 30px;
+      }
+
+      .wutube-stat {
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.46);
+      }
+
+      :root[data-theme="dark"] .wutube-stat {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .wutube-stat strong {
+        display: block;
+        font-size: 1.2rem;
+        margin-bottom: 6px;
+      }
+
+      .wutube-grid {
+        display: grid;
+        grid-template-columns: 1.3fr 0.9fr;
+        gap: 24px;
+        margin-top: 28px;
+      }
+
+      .wutube-panel {
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 26px;
+        background: var(--card-bg);
+        backdrop-filter: blur(12px);
+      }
+
+      .wutube-panel h2 {
+        font-size: 1.4rem;
+        margin-bottom: 10px;
+      }
+
+      .wutube-panel p {
+        color: var(--text-secondary);
+      }
+
+      .wutube-launch-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .wutube-tile {
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 20px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .wutube-tile:hover {
+        transform: translateY(-2px);
+        border-color: rgba(157, 78, 221, 0.35);
+        box-shadow: 0 14px 28px rgba(138, 43, 226, 0.12);
+      }
+
+      .wutube-tile i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        margin-bottom: 14px;
+        border-radius: 14px;
+        background: rgba(157, 78, 221, 0.12);
+        color: var(--accent);
+      }
+
+      .wutube-tile h3 {
+        font-size: 1.05rem;
+        margin-bottom: 8px;
+      }
+
+      .wutube-list {
+        margin-top: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .wutube-list-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .wutube-list-item:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+
+      .wutube-list-item i {
+        margin-top: 2px;
+        color: var(--accent);
+      }
+
+      .wutube-footnote {
+        margin-top: 16px;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+      }
+
+      @media (max-width: 920px) {
+        .wutube-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .wutube-meta {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .wutube-shell {
+          padding: 32px 16px 48px;
+        }
+
+        .wutube-hero,
+        .wutube-panel {
+          padding: 22px;
+          border-radius: 22px;
+        }
+
+        .wutube-search {
+          grid-template-columns: 1fr;
+        }
+
+        .wutube-launch-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
 
   <body>
-    <!-- IMPORTANT-HUCOOKINGINSERT-DONOTDELETE -->
     <!--ANTI-EXFIL-->
     <div id="header" class="fullwidth">
       <!--HEADER-->
     </div>
-    <div id="background" class="fullwidth"></div>
-    <!-- IMPORTANT-HUCOOKINGINSERT-DONOTDELETE -->
-    <div data-aos="fade-right" class="hero-grid-container">
-      <div class="box-hero">
-        <div class="hero-content">
-          <div class="proxy-header text-center">
-            <h1 class="bigtitle">{{mask}}{{Youtube Proxy}}</h1>
-            <p>
-              {{mask}}{{YouTube now has enhanced support with onsite navigation
-              with Scramjet! Simply use the buttons below to access YouTube
-              under a proxy.}}<br /><br />{{mask}}{{Be sure to avoid logging in
-              with primary accounts, as this is a public proxy service.}}<br />{{mask}}{{If
-              you are self-hosting however feel free.}}<br /><br />{{mask}}{{Please enable Tor routing or swap regions if you have any issues.}}
-            </p><br />View the
-            <a href="{{route}}{{/questions}}">FAQ</a> {{mask}}{{page if you have
-            any issues with the proxy.}}
+
+    <main class="wutube-shell">
+      <section class="wutube-hero">
+        <div class="wutube-pill">
+          <i class="fab fa-youtube"></i>
+          {{mask}}{{WuTube}}
+        </div>
+        <h1 class="wutube-title">
+          {{mask}}{{Watch through}}
+          <span>{{mask}}{{Wubu}}</span>
+        </h1>
+        <p class="wutube-copy">
+          {{mask}}{{WuTube is the YouTube front door inside Wubu. Launch videos, channels, playlists, Shorts, and fallback viewers from one place without dropping into the generic proxy page.}}
+        </p>
+
+        <div class="wutube-search">
+          <input
+            class="wutube-input"
+            id="wutube-query"
+            type="text"
+            placeholder="Paste a YouTube URL, channel URL, video ID, or search phrase"
+            value="https://youtube.com"
+          />
+          <button class="wutube-btn primary" id="wutube-browse">
+            <i class="fas fa-play"></i>
+            {{mask}}{{Open WuTube}}
+          </button>
+        </div>
+
+        <div class="wutube-actions">
+          <button class="wutube-btn" id="wutube-search-btn">
+            <i class="fas fa-search"></i>
+            {{mask}}{{Search YouTube}}
+          </button>
+          <button class="wutube-btn" id="wutube-shorts-btn">
+            <i class="fas fa-bolt"></i>
+            {{mask}}{{Open Shorts}}
+          </button>
+          <button class="wutube-btn" id="wutube-trending-btn">
+            <i class="fas fa-fire"></i>
+            {{mask}}{{Trending}}
+          </button>
+          <button class="wutube-btn" id="wutube-invidious-btn">
+            <i class="fas fa-satellite-dish"></i>
+            {{mask}}{{Invidious}}
+          </button>
+        </div>
+
+        <div class="wutube-meta">
+          <div class="wutube-stat">
+            <strong>{{mask}}{{Direct launch}}</strong>
+            <span>{{mask}}{{Drop a full YouTube URL or a bare video ID and jump straight in.}}</span>
           </div>
-          <div class="proxy-form text-center">
-            <div class="glist">
-              <a href="#" id="pr-yt" class="fancybutton glowbutton pr-go2"
-                >{{mask}}{{YouTube}}</a
-              >
-              <a href="#" id="pr-iv" class="fancybutton glowbutton pr-go2"
-                >{{mask}}{{Invidious}}</a
-              >
-            </div>
-            <!--PROXNAV-SETTINGS-->
+          <div class="wutube-stat">
+            <strong>{{mask}}{{Search aware}}</strong>
+            <span>{{mask}}{{Plain text becomes a YouTube results page without extra steps.}}</span>
+          </div>
+          <div class="wutube-stat">
+            <strong>{{mask}}{{Fallback ready}}</strong>
+            <span>{{mask}}{{Switch to Invidious instantly when the main site is acting up.}}</span>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <section class="wutube-grid">
+        <article class="wutube-panel">
+          <h2>{{mask}}{{Quick routes}}</h2>
+          <p>{{mask}}{{Pick a launch mode based on what you already have: a link, a search term, or just a mood.}}</p>
+
+          <div class="wutube-launch-grid">
+            <a class="wutube-tile" href="#" data-launch="home">
+              <i class="fas fa-home"></i>
+              <h3>{{mask}}{{Home feed}}</h3>
+              <p>{{mask}}{{Open YouTube at the default front page.}}</p>
+            </a>
+            <a class="wutube-tile" href="#" data-launch="music">
+              <i class="fas fa-headphones"></i>
+              <h3>{{mask}}{{Music lane}}</h3>
+              <p>{{mask}}{{Jump straight to YouTube Music.}}</p>
+            </a>
+            <a class="wutube-tile" href="#" data-launch="subscriptions">
+              <i class="fas fa-layer-group"></i>
+              <h3>{{mask}}{{Subscriptions}}</h3>
+              <p>{{mask}}{{Load the subscriptions feed route directly.}}</p>
+            </a>
+            <a class="wutube-tile" href="#" data-launch="library">
+              <i class="fas fa-folder-open"></i>
+              <h3>{{mask}}{{Library}}</h3>
+              <p>{{mask}}{{Open saved content and account pages faster.}}</p>
+            </a>
+          </div>
+        </article>
+
+        <aside class="wutube-panel">
+          <h2>{{mask}}{{How WuTube resolves input}}</h2>
+          <div class="wutube-list">
+            <div class="wutube-list-item">
+              <i class="fas fa-link"></i>
+              <div>
+                <strong>{{mask}}{{Full YouTube URL}}</strong>
+                <p>{{mask}}{{Launches exactly what you pasted. Works for channels, videos, playlists, and Shorts links.}}</p>
+              </div>
+            </div>
+            <div class="wutube-list-item">
+              <i class="fas fa-video"></i>
+              <div>
+                <strong>{{mask}}{{Bare video ID}}</strong>
+                <p>{{mask}}{{Automatically becomes a watch URL.}}</p>
+              </div>
+            </div>
+            <div class="wutube-list-item">
+              <i class="fas fa-search"></i>
+              <div>
+                <strong>{{mask}}{{Plain text}}</strong>
+                <p>{{mask}}{{Turns into a YouTube search query page.}}</p>
+              </div>
+            </div>
+          </div>
+          <p class="wutube-footnote">
+            {{mask}}{{Use self-hosted or burner accounts only when signing in through a public proxy.}}
+          </p>
+        </aside>
+      </section>
+    </main>
+
     <div id="footer" class="fullwidth">
       <!--FOOTER-->
     </div>
-    <!-- IMPORTANT-HUCOOKINGINSERT-DONOTDELETE -->
-    {{inline}}{{
-    <script src="{{route}}{{assets/js/card.js}}{{inline}}"></script>
-    }}
+
+    <script>
+      const SCRAM_PREFIX = '{{route}}{{/scram/network/}}';
+      const SCRAM_FILES = {
+        wasm: '{{route}}{{/scram/working.wasm.wasm}}',
+        all: '{{route}}{{/scram/working.all.js}}',
+        sync: '{{route}}{{/scram/working.sync.js}}',
+      };
+
+      let scramControllerPromise = null;
+
+      function withTimeout(promise, ms) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Timeout')), ms);
+          Promise.resolve(promise).then(
+            (value) => {
+              clearTimeout(timer);
+              resolve(value);
+            },
+            (error) => {
+              clearTimeout(timer);
+              reject(error);
+            }
+          );
+        });
+      }
+
+      function normalizeWuTubeInput(input, mode = 'auto') {
+        const raw = String(input || '').trim();
+        if (!raw) return 'https://youtube.com';
+
+        if (/^[\w-]{11}$/.test(raw)) {
+          return `https://www.youtube.com/watch?v=${raw}`;
+        }
+
+        try {
+          const parsed = new URL(raw);
+          return parsed.toString();
+        } catch {}
+
+        if (mode === 'shorts') {
+          return 'https://www.youtube.com/shorts';
+        }
+
+        if (mode === 'trending') {
+          return 'https://www.youtube.com/feed/trending';
+        }
+
+        if (mode === 'subscriptions') {
+          return 'https://www.youtube.com/feed/subscriptions';
+        }
+
+        if (mode === 'library') {
+          return 'https://www.youtube.com/feed/library';
+        }
+
+        if (mode === 'music') {
+          return 'https://music.youtube.com';
+        }
+
+        if (mode === 'search') {
+          return `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
+        }
+
+        if (raw.includes('.') && !raw.includes(' ')) {
+          return `https://${raw}`;
+        }
+
+        return `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
+      }
+
+      async function getScramjetController() {
+        if (scramControllerPromise) return scramControllerPromise;
+
+        scramControllerPromise = (async () => {
+          if (window.proxyReady) {
+            try {
+              await withTimeout(window.proxyReady, 7000);
+            } catch {}
+          }
+
+          if (!window.$scramjetLoadController) return null;
+          const { ScramjetController } = await window.$scramjetLoadController();
+          const controller = new ScramjetController({
+            prefix: SCRAM_PREFIX,
+            files: SCRAM_FILES,
+          });
+          if (typeof controller.init === 'function') {
+            try {
+              await controller.init();
+            } catch {}
+          }
+          return controller;
+        })().catch((error) => {
+          scramControllerPromise = null;
+          throw error;
+        });
+
+        return scramControllerPromise;
+      }
+
+      async function launchWuTube(target) {
+        const resolvedTarget = normalizeWuTubeInput(target);
+
+        try {
+          const controller = await getScramjetController();
+          if (controller) {
+            const encoded = String(controller.encodeUrl(resolvedTarget) || '');
+            const proxyPath = encoded.startsWith('/')
+              ? encoded
+              : SCRAM_PREFIX + encoded;
+            window.location.href = '{{route}}{{/s}}?cache=' + encodeURIComponent(proxyPath);
+            return;
+          }
+        } catch (error) {
+          console.error('WuTube proxy init failed', error);
+        }
+
+        if (window.__uv$config) {
+          const encoded = window.__uv$config.prefix + window.__uv$config.encodeUrl(resolvedTarget);
+          window.location.href = '{{route}}{{/s}}?cache=' + encodeURIComponent(encoded);
+          return;
+        }
+
+        alert('Proxy is still loading. Please try again in a moment.');
+      }
+
+      function bindWuTubeActions() {
+        const input = document.getElementById('wutube-query');
+        const browse = document.getElementById('wutube-browse');
+        const search = document.getElementById('wutube-search-btn');
+        const shorts = document.getElementById('wutube-shorts-btn');
+        const trending = document.getElementById('wutube-trending-btn');
+        const invidious = document.getElementById('wutube-invidious-btn');
+
+        browse?.addEventListener('click', () => launchWuTube(input?.value));
+        search?.addEventListener('click', () =>
+          launchWuTube(normalizeWuTubeInput(input?.value, 'search'))
+        );
+        shorts?.addEventListener('click', () =>
+          launchWuTube(normalizeWuTubeInput('', 'shorts'))
+        );
+        trending?.addEventListener('click', () =>
+          launchWuTube(normalizeWuTubeInput('', 'trending'))
+        );
+        invidious?.addEventListener('click', () =>
+          launchWuTube('https://invidious.snopyta.org')
+        );
+
+        input?.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            launchWuTube(input.value);
+          }
+        });
+
+        document.querySelectorAll('[data-launch]').forEach((element) => {
+          element.addEventListener('click', (event) => {
+            event.preventDefault();
+            const mode = element.getAttribute('data-launch');
+            launchWuTube(normalizeWuTubeInput('', mode));
+          });
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindWuTubeActions);
+      } else {
+        bindWuTubeActions();
+      }
+    </script>
   </body>
 </html>
