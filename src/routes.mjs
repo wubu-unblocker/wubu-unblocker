@@ -192,11 +192,12 @@ const useAltPaths = (altPaths, targetPaths, ancestor, tempKey = '') => {
             key
           )
         ];
-        if (isEndPoint) delete targetPaths[key];
+        if (isEndPoint && value !== key) delete targetPaths[key];
       }
     }
     if ('object' === typeof ancestor) delete ancestor[tempKey];
   } else {
+    if (altPaths === tempKey) return tempKey;
     targetPaths[altPaths] = targetPaths[tempKey];
     return tempKey;
   }
