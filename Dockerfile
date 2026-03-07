@@ -34,6 +34,7 @@ COPY package.json package-lock.json ./
 COPY src ./src
 COPY views ./views
 COPY scripts ./scripts
+COPY YouTube-Clone ./YouTube-Clone
 COPY run-command.mjs ./
 COPY config.json ./
 COPY ecosystem.config.js ./
