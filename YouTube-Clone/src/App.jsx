@@ -43,6 +43,13 @@ const sidebarSections = [
   },
 ]
 
+const siteLinks = [
+  { label: 'Home', href: '/home' },
+  { label: 'Games', href: '/games' },
+  { label: 'Proxies', href: '/browsing' },
+  { label: 'WuTube', href: '/youtube' },
+]
+
 function usePersistentState(key, initialValue) {
   const [value, setValue] = useState(() => {
     const saved = window.localStorage.getItem(key)
@@ -79,9 +86,18 @@ function upsertVideo(list, video) {
 
 function App() {
   const location = useLocation()
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light'
+    return window.localStorage.getItem('wubu-theme') === 'dark' ? 'dark' : 'light'
+  })
   const [history, setHistory] = usePersistentState('wutube-history', [])
   const [watchLater, setWatchLater] = usePersistentState('wutube-watch-later', [])
   const [liked, setLiked] = usePersistentState('wutube-liked', [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    window.localStorage.setItem('wubu-theme', theme)
+  }, [theme])
 
   const saveHistory = useCallback(
     (video) => {
@@ -131,7 +147,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header key={headerKey} />
+      <Header key={headerKey} theme={theme} onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))} />
       <div className="app-layout">
         <Sidebar />
         <main className="content-shell">
@@ -148,7 +164,7 @@ function App() {
   )
 }
 
-function Header() {
+function Header({ theme, onToggleTheme }) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [query, setQuery] = useState(params.get('search_query') ?? '')
@@ -161,6 +177,23 @@ function Header() {
 
   return (
     <header className="topbar">
+      <div className="topbar-main">
+        <a className="site-brand" href="/home">
+          <span className="site-brand-mark">👻</span>
+          <span>Wubu</span>
+        </a>
+        <nav className="site-links" aria-label="Wubu">
+          {siteLinks.map((item) => (
+            <a
+              className={item.href === '/youtube' ? 'active' : ''}
+              href={item.href}
+              key={item.href}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      </div>
       <Link className="brand" to="/">
         <span className="brand-mark">Wu</span>
         <span className="brand-text">Tube</span>
@@ -175,6 +208,9 @@ function Header() {
         <button type="submit">Search</button>
       </form>
       <div className="topbar-actions">
+        <button className="theme-toggle" onClick={onToggleTheme} type="button">
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </button>
         <Link to="/library/watch-later">Watch later</Link>
         <Link to="/library/liked">Liked</Link>
       </div>

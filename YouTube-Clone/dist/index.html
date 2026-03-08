@@ -4,9 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/youtube/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>youtube-clone</title>
-    <script type="module" crossorigin src="/youtube/assets/index-CsIal7Yp.js"></script>
-    <link rel="stylesheet" crossorigin href="/youtube/assets/index-vBRcIc5y.css">
+    <title>Wubu | WuTube</title>
+    <script>
+      try {
+        if (localStorage.getItem('wubu-theme') === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/youtube/assets/index-CgbLoUo4.js"></script>
+    <link rel="stylesheet" crossorigin href="/youtube/assets/index-BMy_Xo3P.css">
   </head>
   <body>
     <div id="root"></div>

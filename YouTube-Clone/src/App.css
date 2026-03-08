@@ -14,18 +14,16 @@
   --shadow: 0 10px 32px rgba(20, 20, 30, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115;
-    --bg-secondary: rgba(255, 255, 255, 0.03);
-    --surface: rgba(255, 255, 255, 0.03);
-    --surface-strong: rgba(255, 255, 255, 0.05);
-    --border: rgba(255, 255, 255, 0.08);
-    --text: #ffffff;
-    --text-secondary: #9ca3af;
-    --accent-soft: rgba(138, 43, 226, 0.18);
-    --shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
-  }
+:root[data-theme='dark'] {
+  --bg: #0f1115;
+  --bg-secondary: rgba(255, 255, 255, 0.03);
+  --surface: rgba(255, 255, 255, 0.03);
+  --surface-strong: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #ffffff;
+  --text-secondary: #9ca3af;
+  --accent-soft: rgba(138, 43, 226, 0.18);
+  --shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -67,7 +65,7 @@ input {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(340px, auto) 220px minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
   padding: 1rem 1.5rem;
@@ -76,10 +74,47 @@ input {
   backdrop-filter: blur(14px);
 }
 
-@media (prefers-color-scheme: dark) {
-  .topbar {
-    background: rgba(15, 17, 21, 0.76);
-  }
+:root[data-theme='dark'] .topbar {
+  background: rgba(15, 17, 21, 0.76);
+}
+
+.topbar-main {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.site-brand-mark {
+  display: inline-flex;
+  font-size: 1.35rem;
+}
+
+.site-links {
+  display: flex;
+  gap: 1.4rem;
+  align-items: center;
+}
+
+.site-links a {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.site-links a.active {
+  color: var(--accent);
+}
+
+.site-links a:hover {
+  color: var(--text);
 }
 
 .brand {
@@ -150,6 +185,15 @@ input {
   border-radius: 0.95rem;
   border: 1px solid var(--border);
   background: var(--surface);
+}
+
+.theme-toggle {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
 }
 
 .app-layout {
@@ -471,6 +515,11 @@ input {
     position: static;
     padding: 1rem 1.5rem 0;
   }
+
+  .topbar-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -483,6 +532,11 @@ input {
 
   .topbar-actions {
     flex-wrap: wrap;
+  }
+
+  .site-links {
+    flex-wrap: wrap;
+    gap: 0.9rem 1rem;
   }
 
   .list-card,
