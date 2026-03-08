@@ -4,6 +4,7 @@ import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
 import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
+import ytSearch from 'yt-search';
 import {
   config,
   serverUrl,
@@ -22,9 +23,7 @@ const wuTubeDistRoot = join(__dirname, '../YouTube-Clone/dist');
 const wuTubeIndexPath = join(wuTubeDistRoot, 'index.html');
 const wuTubeViteIconPath = join(wuTubeDistRoot, 'vite.svg');
 let firebaseAdminPromise;
-let youtubeModulePromise;
 let blooketServicePromise;
-let wuTubeClientPromise;
 
 /* Record the server's location as a URL object, including its host and port.
  * The host can be modified at /src/config.json, whereas the ports can be modified
@@ -58,13 +57,6 @@ async function getFirebaseAdmin() {
     );
   }
   return await firebaseAdminPromise;
-}
-
-async function getYoutubeModule() {
-  if (!youtubeModulePromise) {
-    youtubeModulePromise = import('youtubei.js');
-  }
-  return await youtubeModulePromise;
 }
 
 async function getBlooketService() {
@@ -773,6 +765,15 @@ function wuTubeText(value) {
   return String(value);
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 function wuTubeThumbnail(thumbnails, fallbackId = '') {
   const best = Array.isArray(thumbnails) && thumbnails.length ? thumbnails[0].url : '';
   return best || (fallbackId ? `https://i.ytimg.com/vi/${fallbackId}/hqdefault.jpg` : '');
@@ -800,67 +801,56 @@ function wuTubeTimestamp(lengthText, seconds) {
 
 function normalizeWuTubeSearchVideo(video) {
   return {
-    videoId: video.video_id,
-    url: `https://youtube.com/watch?v=${video.video_id}`,
+    videoId: video.videoId || video.video_id,
+    url: video.url || `https://youtube.com/watch?v=${video.videoId || video.video_id}`,
     title: wuTubeText(video.title) || 'Untitled video',
-    description: wuTubeText(video.description_snippet),
-    thumbnail: wuTubeThumbnail(video.thumbnails, video.video_id),
-    views: wuTubeViews(video.view_count || video.short_view_count),
-    timestamp: wuTubeTimestamp(video.length_text),
-    seconds: 0,
-    ago: wuTubeText(video.published),
-    uploadDate: wuTubeText(video.published),
+    description: wuTubeText(video.description || video.description_snippet),
+    thumbnail: wuTubeThumbnail(
+      video.thumbnail ? [{ url: video.thumbnail }] : video.thumbnails,
+      video.videoId || video.video_id
+    ),
+    views: wuTubeViews(video.views || video.view_count || video.short_view_count),
+    timestamp: wuTubeTimestamp(video.timestamp || video.length_text, video.seconds),
+    seconds: Number(video.seconds) || 0,
+    ago: wuTubeText(video.ago || video.published),
+    uploadDate: wuTubeText(video.uploadDate || video.published),
     author: {
-      name: wuTubeText(video.author?.name) || 'Unknown creator',
+      name: wuTubeText(video.author?.name || video.author) || 'Unknown creator',
       url: wuTubeText(video.author?.url),
     },
   };
 }
 
 function normalizeWuTubeInfo(info, videoId) {
-  const basic = info?.basic_info || {};
   return {
     videoId,
     url: `https://youtube.com/watch?v=${videoId}`,
-    title: wuTubeText(basic.title) || 'Untitled video',
-    description: wuTubeText(basic.short_description),
-    thumbnail: wuTubeThumbnail(basic.thumbnail, videoId),
-    views: wuTubeViews(basic.view_count),
-    timestamp: wuTubeTimestamp('', basic.duration),
-    seconds: Number(basic.duration) || 0,
-    ago: wuTubeText(basic.published),
-    uploadDate: wuTubeText(basic.publish_date || basic.published),
+    title: wuTubeText(info.title) || 'Untitled video',
+    description: wuTubeText(info.description),
+    thumbnail: wuTubeThumbnail(
+      info.thumbnail ? [{ url: info.thumbnail }] : info.thumbnails,
+      videoId
+    ),
+    views: wuTubeViews(info.views),
+    timestamp: wuTubeTimestamp(info.timestamp, info.seconds),
+    seconds: Number(info.seconds) || 0,
+    ago: wuTubeText(info.ago),
+    uploadDate: wuTubeText(info.uploadDate),
     author: {
-      name: wuTubeText(basic.author) || 'Unknown creator',
-      url: '',
+      name: wuTubeText(info.author?.name || info.author) || 'Unknown creator',
+      url: wuTubeText(info.author?.url),
     },
   };
 }
 
-async function getWuTubeClient(forceRefresh = false) {
-  const { Innertube } = await getYoutubeModule();
-  if (!wuTubeClientPromise || forceRefresh) {
-    wuTubeClientPromise = Innertube.create();
-  }
-  return await wuTubeClientPromise;
-}
-
-async function withWuTubeClient(work) {
-  try {
-    const client = await getWuTubeClient(false);
-    return await work(client);
-  } catch (error) {
-    const client = await getWuTubeClient(true);
-    return await work(client);
-  }
-}
-
 async function searchWuTubeVideos(query, limit = 12) {
-  const { YTNodes } = await getYoutubeModule();
-  return await withWuTubeClient(async (client) => {
-    const result = await client.search(query);
-    return result.results.filterType(YTNodes.Video).slice(0, limit).map(normalizeWuTubeSearchVideo);
-  });
+  const result = await withTimeout(ytSearch(query), 12000, `WuTube search (${query})`);
+  return (result?.videos || []).slice(0, limit).map(normalizeWuTubeSearchVideo);
+}
+
+async function loadWuTubeVideo(videoId) {
+  const result = await withTimeout(ytSearch({ videoId }), 12000, `WuTube video (${videoId})`);
+  return normalizeWuTubeInfo(result, videoId);
 }
 
 function sendWuTubeIndex(reply) {
@@ -945,9 +935,8 @@ app.get(serverUrl.pathname + 'youtube/api/search', async (req, reply) => {
 
 app.get(serverUrl.pathname + 'youtube/api/video/:id', async (req, reply) => {
   try {
-    const info = await withWuTubeClient((client) => client.getInfo(req.params.id));
-    const video = normalizeWuTubeInfo(info, req.params.id);
-    const relatedQuery = `${video.author.name} ${video.title}`;
+    const video = await loadWuTubeVideo(req.params.id);
+    const relatedQuery = `${video.author.name} ${video.title}`.trim();
     const related = (await searchWuTubeVideos(relatedQuery, 10)).filter(
       (candidate) => candidate.videoId !== video.videoId
     );
