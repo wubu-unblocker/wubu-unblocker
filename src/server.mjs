@@ -860,7 +860,12 @@ function sendWuTubeIndex(reply) {
 // Root route - Redirect to /stuff
 if (serverUrl.pathname === '/') {
   app.get('/', (req, reply) => {
-    reply.redirect('/home');
+    try {
+      const content = tryReadFile('../views/home.html', import.meta.url, false);
+      reply.type('text/html').send(content);
+    } catch (e) {
+      reply.code(404).send('Home page not found');
+    }
   });
 }
 
