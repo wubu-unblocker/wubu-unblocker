@@ -4,8 +4,6 @@ import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
 import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
-import admin from 'firebase-admin';
-import { Innertube, YTNodes } from 'youtubei.js';
 import {
   config,
   serverUrl,
@@ -16,7 +14,6 @@ import {
 import { tryReadFile, preloaded404 } from './templates.mjs';
 import { fileURLToPath } from 'node:url';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
-import { setupBlooketService } from './blooket-service.mjs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -24,6 +21,9 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const wuTubeDistRoot = join(__dirname, '../YouTube-Clone/dist');
 const wuTubeIndexPath = join(wuTubeDistRoot, 'index.html');
 const wuTubeViteIconPath = join(wuTubeDistRoot, 'vite.svg');
+let firebaseAdminPromise;
+let youtubeModulePromise;
+let blooketServicePromise;
 let wuTubeClientPromise;
 
 /* Record the server's location as a URL object, including its host and port.
@@ -51,8 +51,30 @@ wisp.options.allow_loopback_ips = true;
 // The server will check for the existence of this file when a shutdown is requested.
 const shutdown = fileURLToPath(new URL('./.shutdown', import.meta.url));
 
-// Initialize Blooket Service (Puppeteer-based streaming for Blooket)
-const { wss: blooketWss, startBrowser: startBlooketBrowser } = setupBlooketService();
+async function getFirebaseAdmin() {
+  if (!firebaseAdminPromise) {
+    firebaseAdminPromise = import('firebase-admin').then(
+      (module) => module.default || module
+    );
+  }
+  return await firebaseAdminPromise;
+}
+
+async function getYoutubeModule() {
+  if (!youtubeModulePromise) {
+    youtubeModulePromise = import('youtubei.js');
+  }
+  return await youtubeModulePromise;
+}
+
+async function getBlooketService() {
+  if (!blooketServicePromise) {
+    blooketServicePromise = import('./blooket-service.mjs').then(
+      ({ setupBlooketService }) => setupBlooketService()
+    );
+  }
+  return await blooketServicePromise;
+}
 
 // Puppeteer/Chromium startup is expensive on small hosts (HF Spaces) and can cause large
 // latency spikes for all requests if we pre-warm at boot. Default to lazy-start on the
@@ -60,9 +82,9 @@ const { wss: blooketWss, startBrowser: startBlooketBrowser } = setupBlooketServi
 if (String(process.env.BLOOKET_PREWARM || '').toLowerCase() === 'true') {
   // Defer a bit so the HTTP server can come up first.
   setTimeout(() => {
-    startBlooketBrowser().catch((err) =>
-      console.error('Failed to prewarm Blooket Browser:', err)
-    );
+    void getBlooketService()
+      .then(({ startBrowser }) => startBrowser())
+      .catch((err) => console.error('Failed to prewarm Blooket Browser:', err));
   }, 1500);
 }
 
@@ -85,9 +107,16 @@ const serverFactory = (handler) => {
       const blooketWsPath = serverUrl.pathname + 'blooket-ws';
       if (req.url === blooketWsPath || req.url === '/blooket-ws') {
         if (WS_DEBUG) console.log('[WebSocket] Routing to Blooket service');
-        blooketWss.handleUpgrade(req, socket, head, (ws) => {
-          blooketWss.emit('connection', ws, req);
-        });
+        void getBlooketService()
+          .then(({ wss }) => {
+            wss.handleUpgrade(req, socket, head, (ws) => {
+              wss.emit('connection', ws, req);
+            });
+          })
+          .catch((err) => {
+            console.error('[WebSocket] Failed to initialize Blooket service:', err);
+            socket.destroy();
+          });
         return;
       }
 
@@ -122,6 +151,10 @@ const app = Fastify({
   keepAliveTimeout: 10000,
   bodyLimit: 1048576 * 50, // 50MB body limit
   serverFactory: serverFactory,
+});
+
+app.get('/healthz', (req, reply) => {
+  reply.send({ ok: true });
 });
 
 // Apply Helmet middleware for security.
@@ -219,8 +252,9 @@ function tryParseServiceAccountJson(raw, sourceLabel) {
   }
 }
 
-function initIssuesFirebase() {
+async function initIssuesFirebase() {
   if (issuesFirebase) return issuesFirebase;
+  const admin = await getFirebaseAdmin();
 
   let serviceAccount;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -294,7 +328,7 @@ function rankFor(score, updatedAt) {
 app.get(serverUrl.pathname + 'api/issues', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -324,7 +358,7 @@ app.get(serverUrl.pathname + 'api/issues', async (req, reply) => {
 // Debug endpoint to quickly verify Firebase init on HF.
 app.get(serverUrl.pathname + 'api/issues/health', async (req, reply) => {
   try {
-    const fb = initIssuesFirebase();
+    const fb = await initIssuesFirebase();
     return reply.send({
       ok: true,
       projectId: fb.projectId,
@@ -338,7 +372,7 @@ app.get(serverUrl.pathname + 'api/issues/health', async (req, reply) => {
 app.post(serverUrl.pathname + 'api/issues', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -387,7 +421,7 @@ app.post(serverUrl.pathname + 'api/issues', async (req, reply) => {
 app.get(serverUrl.pathname + 'api/issues/:id', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -428,7 +462,7 @@ app.get(serverUrl.pathname + 'api/issues/:id', async (req, reply) => {
 app.post(serverUrl.pathname + 'api/issues/:id/comments', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -487,7 +521,7 @@ app.post(serverUrl.pathname + 'api/issues/:id/comments', async (req, reply) => {
 app.post(serverUrl.pathname + 'api/issues/:id/reaction', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -554,7 +588,7 @@ app.post(serverUrl.pathname + 'api/issues/:id/reaction', async (req, reply) => {
 app.post(serverUrl.pathname + 'api/issues/upload', async (req, reply) => {
   let fb;
   try {
-    fb = initIssuesFirebase();
+    fb = await initIssuesFirebase();
   } catch (e) {
     return reply.code(503).send({ error: String(e.message || e) });
   }
@@ -804,6 +838,7 @@ function normalizeWuTubeInfo(info, videoId) {
 }
 
 async function getWuTubeClient(forceRefresh = false) {
+  const { Innertube } = await getYoutubeModule();
   if (!wuTubeClientPromise || forceRefresh) {
     wuTubeClientPromise = Innertube.create();
   }
@@ -821,6 +856,7 @@ async function withWuTubeClient(work) {
 }
 
 async function searchWuTubeVideos(query, limit = 12) {
+  const { YTNodes } = await getYoutubeModule();
   return await withWuTubeClient(async (client) => {
     const result = await client.search(query);
     return result.results.filterType(YTNodes.Video).slice(0, limit).map(normalizeWuTubeSearchVideo);
