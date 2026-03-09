@@ -146,7 +146,17 @@ const app = Fastify({
 });
 
 app.get('/healthz', (req, reply) => {
-  reply.send({ ok: true });
+  reply
+    .header('Cache-Control', 'no-store, max-age=0')
+    .type('text/plain; charset=utf-8')
+    .send('ok');
+});
+
+app.get('/_hf/ready', (req, reply) => {
+  reply
+    .header('Cache-Control', 'no-store, max-age=0')
+    .type('text/plain; charset=utf-8')
+    .send('ok');
 });
 
 // Apply Helmet middleware for security.
