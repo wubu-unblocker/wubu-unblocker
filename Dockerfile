@@ -54,7 +54,4 @@ RUN npm prune --omit=dev && npm cache clean --force
 
 EXPOSE 7860
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:7860/healthz >/dev/null || exit 1
-
 CMD ["node", "src/server.mjs"]
