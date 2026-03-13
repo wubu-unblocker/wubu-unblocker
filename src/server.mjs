@@ -4,7 +4,7 @@ import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
 import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
-import ytSearch from 'yt-search';
+import Innertube from 'youtubei.js';
 import {
   config,
   serverUrl,
@@ -24,6 +24,7 @@ const wuTubeIndexPath = join(wuTubeDistRoot, 'index.html');
 const wuTubeViteIconPath = join(wuTubeDistRoot, 'vite.svg');
 let firebaseAdminPromise;
 let blooketServicePromise;
+let wuTubeClientPromise;
 
 /* Record the server's location as a URL object, including its host and port.
  * The host can be modified at /src/config.json, whereas the ports can be modified
@@ -66,6 +67,15 @@ async function getBlooketService() {
     );
   }
   return await blooketServicePromise;
+}
+
+async function getWuTubeClient() {
+  if (!wuTubeClientPromise) {
+    wuTubeClientPromise = Innertube.create({
+      generate_session_locally: true,
+    });
+  }
+  return await wuTubeClientPromise;
 }
 
 // Puppeteer/Chromium startup is expensive on small hosts (HF Spaces) and can cause large
@@ -771,6 +781,7 @@ function wuTubeText(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
   if (typeof value.toString === 'function') return value.toString();
+  if (typeof value.content === 'string') return value.content;
   if (typeof value.text === 'string') return value.text;
   return String(value);
 }
@@ -787,6 +798,17 @@ function withTimeout(promise, ms, label) {
 function wuTubeThumbnail(thumbnails, fallbackId = '') {
   const best = Array.isArray(thumbnails) && thumbnails.length ? thumbnails[0].url : '';
   return best || (fallbackId ? `https://i.ytimg.com/vi/${fallbackId}/hqdefault.jpg` : '');
+}
+
+function wuTubeDescription(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => wuTubeDescription(entry?.text || entry))
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+  }
+  return wuTubeText(value);
 }
 
 function wuTubeViews(value) {
@@ -810,14 +832,19 @@ function wuTubeTimestamp(lengthText, seconds) {
 }
 
 function normalizeWuTubeSearchVideo(video) {
+  const videoId = video.videoId || video.video_id;
+  if (!videoId) return null;
+
   return {
-    videoId: video.videoId || video.video_id,
-    url: video.url || `https://youtube.com/watch?v=${video.videoId || video.video_id}`,
+    videoId,
+    url: video.url || `https://youtube.com/watch?v=${videoId}`,
     title: wuTubeText(video.title) || 'Untitled video',
-    description: wuTubeText(video.description || video.description_snippet),
+    description: wuTubeDescription(
+      video.description || video.description_snippet || video.snippets
+    ),
     thumbnail: wuTubeThumbnail(
       video.thumbnail ? [{ url: video.thumbnail }] : video.thumbnails,
-      video.videoId || video.video_id
+      videoId
     ),
     views: wuTubeViews(video.views || video.view_count || video.short_view_count),
     timestamp: wuTubeTimestamp(video.timestamp || video.length_text, video.seconds),
@@ -832,34 +859,54 @@ function normalizeWuTubeSearchVideo(video) {
 }
 
 function normalizeWuTubeInfo(info, videoId) {
+  const basicInfo = info?.basic_info || info || {};
   return {
-    videoId,
+    videoId: basicInfo.id || videoId,
     url: `https://youtube.com/watch?v=${videoId}`,
-    title: wuTubeText(info.title) || 'Untitled video',
-    description: wuTubeText(info.description),
+    title: wuTubeText(basicInfo.title) || 'Untitled video',
+    description: wuTubeDescription(basicInfo.short_description || info.description),
     thumbnail: wuTubeThumbnail(
-      info.thumbnail ? [{ url: info.thumbnail }] : info.thumbnails,
+      basicInfo.thumbnail,
       videoId
     ),
-    views: wuTubeViews(info.views),
-    timestamp: wuTubeTimestamp(info.timestamp, info.seconds),
-    seconds: Number(info.seconds) || 0,
-    ago: wuTubeText(info.ago),
-    uploadDate: wuTubeText(info.uploadDate),
+    views: wuTubeViews(basicInfo.view_count),
+    timestamp: wuTubeTimestamp('', basicInfo.duration),
+    seconds: Number(basicInfo.duration) || 0,
+    ago: '',
+    uploadDate: '',
     author: {
-      name: wuTubeText(info.author?.name || info.author) || 'Unknown creator',
-      url: wuTubeText(info.author?.url),
+      name:
+        wuTubeText(
+          basicInfo.author ||
+            basicInfo.channel?.name ||
+            basicInfo.channel
+        ) || 'Unknown creator',
+      url:
+        wuTubeText(basicInfo.channel?.url) ||
+        (basicInfo.channel_id
+          ? `https://www.youtube.com/channel/${basicInfo.channel_id}`
+          : ''),
     },
   };
 }
 
 async function searchWuTubeVideos(query, limit = 12) {
-  const result = await withTimeout(ytSearch(query), 12000, `WuTube search (${query})`);
-  return (result?.videos || []).slice(0, limit).map(normalizeWuTubeSearchVideo);
+  const client = await getWuTubeClient();
+  const result = await withTimeout(client.search(query), 12000, `WuTube search (${query})`);
+  return (result?.results || [])
+    .filter((item) => item?.type === 'Video')
+    .map(normalizeWuTubeSearchVideo)
+    .filter(Boolean)
+    .slice(0, limit);
 }
 
 async function loadWuTubeVideo(videoId) {
-  const result = await withTimeout(ytSearch({ videoId }), 12000, `WuTube video (${videoId})`);
+  const client = await getWuTubeClient();
+  const result = await withTimeout(
+    client.getBasicInfo(videoId),
+    12000,
+    `WuTube video (${videoId})`
+  );
   return normalizeWuTubeInfo(result, videoId);
 }
 
@@ -952,11 +999,19 @@ app.get(serverUrl.pathname + 'youtube/api/video/:id', async (req, reply) => {
   try {
     const video = await loadWuTubeVideo(req.params.id);
     const relatedQuery = `${video.author.name} ${video.title}`.trim();
-    const related = (await searchWuTubeVideos(relatedQuery, 10)).filter(
-      (candidate) => candidate.videoId !== video.videoId
-    );
+    let related = [];
+    let degraded = false;
 
-    return reply.send({ video, related });
+    try {
+      related = (await searchWuTubeVideos(relatedQuery, 10)).filter(
+        (candidate) => candidate.videoId !== video.videoId
+      );
+    } catch (error) {
+      degraded = true;
+      console.error('[WuTube] Related videos failed:', error);
+    }
+
+    return reply.send({ video, related, degraded });
   } catch (e) {
     console.error('[WuTube] Video load failed:', e);
     return reply.code(500).send({ error: 'Video load failed.' });
