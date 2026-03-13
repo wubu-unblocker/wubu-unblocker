@@ -68,11 +68,21 @@ function upsertVideo(list, video) {
 }
 
 function embedUrlFor(videoId) {
-  const origin =
-    typeof window !== 'undefined' && window.location?.origin
-      ? `&origin=${encodeURIComponent(window.location.origin)}`
-      : ''
-  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1${origin}`
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`
+  }
+
+  const origin = encodeURIComponent(window.location.origin)
+  return [
+    `https://www.youtube.com/embed/${videoId}`,
+    '?autoplay=1',
+    '&rel=0',
+    '&modestbranding=1',
+    '&playsinline=1',
+    '&enablejsapi=1',
+    `&origin=${origin}`,
+    `&widget_referrer=${origin}`,
+  ].join('')
 }
 
 function App() {
@@ -456,6 +466,7 @@ function WatchPage({ library }) {
               src={embedUrlFor(video.videoId)}
               title={video.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
               allowFullScreen
             />
           </div>

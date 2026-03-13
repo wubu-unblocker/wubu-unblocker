@@ -1020,7 +1020,6 @@ async function wuTubeFallbackVideo(videoId) {
 
   const headingMatch = jinaText.match(/^Title:\s*(.+)$/m);
   const statsMatch = jinaText.match(/\n([^\n]+?)\s+([\d,.\w]+ views)\s+([^\n]+ ago)\n/i);
-  const descriptionMatch = jinaText.match(/\nDescription\s*\n+([\s\S]*?)\n(?:[-=]{2,}|\[|\Z)/i);
   const title =
     wuTubeStripHtml(headingMatch?.[1] || data.title).replace(/\s*-\s*YouTube$/i, '').trim() ||
     'Untitled video';
@@ -1032,7 +1031,7 @@ async function wuTubeFallbackVideo(videoId) {
     videoId,
     url: `https://youtube.com/watch?v=${videoId}`,
     title,
-    description: wuTubeShortDescription(descriptionMatch?.[1] || '', 1200),
+    description: '',
     thumbnail: wuTubeText(data.thumbnail_url) || wuTubeThumbnail([], videoId),
     views: wuTubeViews(viewsText),
     timestamp: '--:--',
