@@ -4,7 +4,6 @@ import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
 import fastifyHelmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
-import Innertube from 'youtubei.js';
 import {
   config,
   serverUrl,
@@ -22,9 +21,11 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const wuTubeDistRoot = join(__dirname, '../YouTube-Clone/dist');
 const wuTubeIndexPath = join(wuTubeDistRoot, 'index.html');
 const wuTubeViteIconPath = join(wuTubeDistRoot, 'vite.svg');
+const wuTubeInvidiousSearchInstances = Object.freeze([
+  'https://inv.nadeko.net',
+]);
 let firebaseAdminPromise;
 let blooketServicePromise;
-let wuTubeClientPromise;
 
 /* Record the server's location as a URL object, including its host and port.
  * The host can be modified at /src/config.json, whereas the ports can be modified
@@ -67,15 +68,6 @@ async function getBlooketService() {
     );
   }
   return await blooketServicePromise;
-}
-
-async function getWuTubeClient() {
-  if (!wuTubeClientPromise) {
-    wuTubeClientPromise = Innertube.create({
-      generate_session_locally: true,
-    });
-  }
-  return await wuTubeClientPromise;
 }
 
 // Puppeteer/Chromium startup is expensive on small hosts (HF Spaces) and can cause large
@@ -820,7 +812,14 @@ function wuTubeShortDescription(value, maxLength = 280) {
 
 function wuTubeViews(value) {
   if (typeof value === 'number') return value;
-  const digits = wuTubeText(value).replace(/[^\d]/g, '');
+  const text = wuTubeText(value).trim();
+  const compact = text.match(/([\d.,]+)\s*([KMB])/i);
+  if (compact) {
+    const numeric = Number(compact[1].replace(/,/g, ''));
+    const factor = { K: 1e3, M: 1e6, B: 1e9 }[compact[2].toUpperCase()] || 1;
+    return Number.isFinite(numeric) ? Math.round(numeric * factor) : 0;
+  }
+  const digits = text.replace(/[^\d]/g, '');
   return digits ? Number(digits) : 0;
 }
 
@@ -876,7 +875,7 @@ function normalizeWuTubeFallbackSearchResult(result) {
     description: result.description || '',
     thumbnail: wuTubeThumbnail([], result.videoId),
     views: wuTubeViews(result.viewsText),
-    timestamp: '--:--',
+    timestamp: result.timestamp || '--:--',
     seconds: 0,
     ago: result.ago || '',
     uploadDate: result.ago || '',
@@ -904,39 +903,50 @@ async function wuTubeFetchJinaPage(targetUrl) {
   );
 }
 
-async function wuTubeFallbackSearch(query, limit = 12) {
-  const html = await wuTubeFetchJinaPage(
-    `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
-  );
-  const results = [];
-  const titleMatches = [
-    ...html.matchAll(
-      /### \[(.*?)\]\((https?:\/\/www\.youtube\.com\/watch\?v=[^)]+)\s+"[^"]*"\)/g
-    ),
-  ];
+function wuTubeSearchInstances() {
+  const extra = String(process.env.WUTUBE_INVIDIOUS_SEARCH_INSTANCES || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return [...new Set([...extra, ...wuTubeInvidiousSearchInstances])];
+}
 
-  for (let i = 0; i < titleMatches.length; i += 1) {
-    const match = titleMatches[i];
-    const nextIndex = titleMatches[i + 1]?.index || html.length;
-    const block = html.slice(match.index, nextIndex);
-    const title = wuTubeStripHtml(match[1]);
-    const url = match[2];
-    const videoId = wuTubeExtractVideoId(url);
+function wuTubeParseInvidiousSearchResults(html, limit = 12) {
+  const results = [];
+  const cardBlocks = html
+    .split('<div class="pure-u-1 pure-u-md-1-4">')
+    .slice(1);
+
+  for (const block of cardBlocks) {
+    const videoIdMatch = block.match(/href="\/watch\?v=([^"&]+)(?:[^"]*)"/);
+    if (!videoIdMatch) continue;
+    const videoId = wuTubeDecodeHtmlEntities(videoIdMatch[1]);
     if (!videoId) continue;
 
-    const authorMatch = block.match(/\n\[(.*?)\]\(http:\/\/www\.youtube\.com\/@[^)]+\)/);
-    const metaMatch = block.match(/\n\s*([\d.,KMGB]+(?:\s+\w+)?) views ([^\n]+)/i);
-    const snippetMatch = block.match(/\n\n([^\n][\s\S]*?)\n\n From the video description /);
+    const titleMatch = block.match(
+      /<a href="\/watch\?v=[^"]+">\s*<p[^>]*dir="auto">([\s\S]*?)<\/p>\s*<\/a>/
+    );
+    const authorMatch = block.match(
+      /<p class="channel-name"[^>]*dir="auto">([\s\S]*?)<\/p>/
+    );
+    const lengthMatch = block.match(/<p class="length">([\s\S]*?)<\/p>/);
+    const dataMatches = [...block.matchAll(/<p class="video-data"[^>]*dir="auto">([\s\S]*?)<\/p>/g)]
+      .map((match) => wuTubeStripHtml(match[1]));
+    const title = wuTubeStripHtml(titleMatch?.[1] || '');
+    const author = wuTubeStripHtml(authorMatch?.[1] || '');
+    const viewsText = dataMatches.find((entry) => /\d/.test(entry)) || '';
+    const agoText = dataMatches.find((entry) => /\D/.test(entry) && entry !== viewsText) || '';
 
     results.push(
       normalizeWuTubeFallbackSearchResult({
         videoId,
         url: `https://youtube.com/watch?v=${videoId}`,
         title,
-        description: wuTubeShortDescription(snippetMatch?.[1] || ''),
-        author: wuTubeStripHtml(authorMatch?.[1] || ''),
-        viewsText: wuTubeStripHtml(metaMatch?.[1] || ''),
-        ago: wuTubeStripHtml(metaMatch?.[2] || ''),
+        description: '',
+        author,
+        viewsText,
+        ago: agoText,
+        timestamp: wuTubeStripHtml(lengthMatch?.[1] || '--:--'),
       })
     );
 
@@ -944,6 +954,42 @@ async function wuTubeFallbackSearch(query, limit = 12) {
   }
 
   return results.filter(Boolean);
+}
+
+async function wuTubeInvidiousSearch(query, limit = 12) {
+  const errors = [];
+
+  for (const baseUrl of wuTubeSearchInstances()) {
+    try {
+      const url = `${baseUrl}/search?q=${encodeURIComponent(query)}`;
+      const html = await withTimeout(
+        fetch(url, {
+          headers: {
+            'user-agent': 'Mozilla/5.0',
+          },
+        }).then((response) => {
+          if (!response.ok) {
+            throw new Error(`Invidious search failed with HTTP ${response.status}`);
+          }
+          return response.text();
+        }),
+        15000,
+        `WuTube Invidious search (${url})`
+      );
+
+      const videos = wuTubeParseInvidiousSearchResults(html, limit);
+      if (videos.length) {
+        return { videos, degraded: true, source: baseUrl };
+      }
+      throw new Error(`No Invidious search results from ${baseUrl}.`);
+    } catch (error) {
+      errors.push({ baseUrl, error });
+    }
+  }
+
+  const aggregate = new Error('WuTube Invidious search failed.');
+  aggregate.cause = errors;
+  throw aggregate;
 }
 
 async function wuTubeFallbackVideo(videoId) {
@@ -1044,47 +1090,46 @@ function normalizeWuTubeInfo(info, videoId) {
 
 async function searchWuTubeVideos(query, limit = 12) {
   try {
-    const client = await getWuTubeClient();
-    const result = await withTimeout(client.search(query), 12000, `WuTube search (${query})`);
-    const videos = (result?.results || [])
-      .filter((item) => item?.type === 'Video')
-      .map(normalizeWuTubeSearchVideo)
+    return await wuTubeInvidiousSearch(query, limit);
+  } catch (invidiousError) {
+    console.error('[WuTube] Invidious search failed, trying mirrored fallback:', invidiousError);
+    const html = await wuTubeFetchJinaPage(
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+    );
+    const titleMatches = [
+      ...html.matchAll(
+        /### \[(.*?)\]\((https?:\/\/www\.youtube\.com\/watch\?v=[^)]+)\s+"[^"]*"\)/g
+      ),
+    ];
+    const videos = titleMatches
+      .map((match) => {
+        const videoId = wuTubeExtractVideoId(match[2]);
+        if (!videoId) return null;
+        return normalizeWuTubeFallbackSearchResult({
+          videoId,
+          url: `https://youtube.com/watch?v=${videoId}`,
+          title: wuTubeStripHtml(match[1]),
+          description: '',
+          author: '',
+        });
+      })
       .filter(Boolean)
       .slice(0, limit);
 
-    if (videos.length) {
-      return { videos, degraded: false, source: 'youtube' };
-    }
-    throw new Error('No direct YouTube results returned.');
-  } catch (directError) {
-    console.error('[WuTube] Direct search failed, trying fallback:', directError);
-    const videos = await wuTubeFallbackSearch(query, limit);
-
     if (!videos.length) {
-      throw new Error('WuTube fallback search returned no videos.');
+      throw new Error('WuTube search produced no results.');
     }
 
-    return { videos, degraded: true, source: 'duckduckgo+noembed' };
+    return { videos, degraded: true, source: 'jina-mirror' };
   }
 }
 
 async function loadWuTubeVideo(videoId) {
-  try {
-    const client = await getWuTubeClient();
-    const result = await withTimeout(
-      client.getBasicInfo(videoId),
-      12000,
-      `WuTube video (${videoId})`
-    );
-    return { video: normalizeWuTubeInfo(result, videoId), degraded: false, source: 'youtube' };
-  } catch (directError) {
-    console.error('[WuTube] Direct video lookup failed, trying fallback:', directError);
-    return {
-      video: await wuTubeFallbackVideo(videoId),
-      degraded: true,
-      source: 'noembed',
-    };
-  }
+  return {
+    video: await wuTubeFallbackVideo(videoId),
+    degraded: true,
+    source: 'noembed',
+  };
 }
 
 function sendWuTubeIndex(reply) {
