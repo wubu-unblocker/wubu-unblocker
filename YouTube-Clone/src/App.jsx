@@ -67,6 +67,14 @@ function upsertVideo(list, video) {
   return next.slice(0, 48)
 }
 
+function embedUrlFor(videoId) {
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? `&origin=${encodeURIComponent(window.location.origin)}`
+      : ''
+  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1${origin}`
+}
+
 function App() {
   const location = useLocation()
   const [theme, setTheme] = useState(() => {
@@ -445,7 +453,7 @@ function WatchPage({ library }) {
         <section className="watch-main">
           <div className="player-frame">
             <iframe
-              src={`https://www.youtube.com/embed/${video.videoId}?autoplay=1&rel=0`}
+              src={embedUrlFor(video.videoId)}
               title={video.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen

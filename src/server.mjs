@@ -841,6 +841,7 @@ function wuTubeTimestamp(lengthText, seconds) {
 function wuTubeDecodeHtmlEntities(value) {
   return String(value || '')
     .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
@@ -931,12 +932,16 @@ function wuTubeParseInvidiousSearchResults(html, limit = 12) {
       /<p class="channel-name"[^>]*dir="auto">([\s\S]*?)<\/p>/
     );
     const lengthMatch = block.match(/<p class="length">([\s\S]*?)<\/p>/);
-    const dataMatches = [...block.matchAll(/<p class="video-data"[^>]*dir="auto">([\s\S]*?)<\/p>/g)]
-      .map((match) => wuTubeStripHtml(match[1]));
+    const leftDataMatch = block.match(
+      /<div class="flex-left">\s*<p class="video-data"[^>]*dir="auto">([\s\S]*?)<\/p>/
+    );
+    const rightDataMatch = block.match(
+      /<div class="flex-right">\s*<p class="video-data"[^>]*dir="auto">([\s\S]*?)<\/p>/
+    );
     const title = wuTubeStripHtml(titleMatch?.[1] || '');
-    const author = wuTubeStripHtml(authorMatch?.[1] || '');
-    const viewsText = dataMatches.find((entry) => /\d/.test(entry)) || '';
-    const agoText = dataMatches.find((entry) => /\D/.test(entry) && entry !== viewsText) || '';
+    const author = wuTubeStripHtml(authorMatch?.[1] || '').replace(/\s+/g, ' ').trim();
+    const viewsText = wuTubeStripHtml(rightDataMatch?.[1] || '');
+    const agoText = wuTubeStripHtml(leftDataMatch?.[1] || '');
 
     results.push(
       normalizeWuTubeFallbackSearchResult({
@@ -962,7 +967,7 @@ async function wuTubeInvidiousSearch(query, limit = 12) {
 
   for (const baseUrl of wuTubeSearchInstances()) {
     try {
-      const url = `${baseUrl}/search?q=${encodeURIComponent(query)}`;
+      const url = `${baseUrl}/search?q=${encodeURIComponent(query)}&hl=en-US`;
       const html = await withTimeout(
         fetch(url, {
           headers: {
@@ -994,6 +999,7 @@ async function wuTubeInvidiousSearch(query, limit = 12) {
 }
 
 async function wuTubeFallbackVideo(videoId) {
+  const jinaText = await wuTubeFetchJinaPage(`https://www.youtube.com/watch?v=${videoId}`);
   const noembedUrl =
     `https://noembed.com/embed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
   const data = await withTimeout(
@@ -1012,19 +1018,29 @@ async function wuTubeFallbackVideo(videoId) {
     `WuTube fallback video (${videoId})`
   );
 
+  const headingMatch = jinaText.match(/^Title:\s*(.+)$/m);
+  const statsMatch = jinaText.match(/\n([^\n]+?)\s+([\d,.\w]+ views)\s+([^\n]+ ago)\n/i);
+  const descriptionMatch = jinaText.match(/\nDescription\s*\n+([\s\S]*?)\n(?:[-=]{2,}|\[|\Z)/i);
+  const title =
+    wuTubeStripHtml(headingMatch?.[1] || data.title).replace(/\s*-\s*YouTube$/i, '').trim() ||
+    'Untitled video';
+  const authorName = wuTubeStripHtml(statsMatch?.[1] || data.author_name);
+  const viewsText = wuTubeStripHtml(statsMatch?.[2] || '');
+  const agoText = wuTubeStripHtml(statsMatch?.[3] || '');
+
   return {
     videoId,
     url: `https://youtube.com/watch?v=${videoId}`,
-    title: wuTubeText(data.title) || 'Untitled video',
-    description: '',
+    title,
+    description: wuTubeShortDescription(descriptionMatch?.[1] || '', 1200),
     thumbnail: wuTubeText(data.thumbnail_url) || wuTubeThumbnail([], videoId),
-    views: 0,
+    views: wuTubeViews(viewsText),
     timestamp: '--:--',
     seconds: 0,
-    ago: '',
-    uploadDate: '',
+    ago: agoText,
+    uploadDate: agoText,
     author: {
-      name: wuTubeText(data.author_name) || 'Unknown creator',
+      name: authorName || 'Unknown creator',
       url: wuTubeText(data.author_url),
     },
   };
