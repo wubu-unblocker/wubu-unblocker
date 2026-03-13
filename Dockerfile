@@ -55,3 +55,4 @@ RUN npm prune --omit=dev && npm cache clean --force
 EXPOSE 7860
 
 CMD ["node", "src/server.mjs"]
+# HF refresh marker: 2026-03-12 WuTube backend update

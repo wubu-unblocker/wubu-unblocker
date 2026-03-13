@@ -32,6 +32,7 @@ let blooketServicePromise;
  * at /ecosystem.config.js.
  */
 console.log('Server URL:', serverUrl);
+console.log('WuTube backend: invidious-search + jina-mirror + noembed');
 
 const WS_DEBUG = String(process.env.WUBU_WS_DEBUG || '').toLowerCase() === 'true';
 
