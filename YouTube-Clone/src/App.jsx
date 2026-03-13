@@ -67,6 +67,13 @@ function upsertVideo(list, video) {
   return next.slice(0, 48)
 }
 
+function watchHref(video) {
+  return {
+    pathname: `/watch/${video.videoId}`,
+    state: { video },
+  }
+}
+
 function embedUrlFor(videoId) {
   if (typeof window === 'undefined' || !window.location?.origin) {
     return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`
@@ -406,10 +413,13 @@ function SearchPage() {
 function WatchPage({ library }) {
   const location = useLocation()
   const videoId = location.pathname.split('/').pop()
+  const prefetchedVideo = location.state?.video ?? null
   const { saveHistory } = library
   const [state, setState] = useState({
-    payload: null,
-    loading: true,
+    video: prefetchedVideo,
+    related: [],
+    loading: !prefetchedVideo,
+    loadingMeta: true,
     error: '',
     degraded: false,
   })
@@ -418,13 +428,20 @@ function WatchPage({ library }) {
     let cancelled = false
 
     async function load() {
-      setState((current) => ({ ...current, loading: true, error: '' }))
+      setState((current) => ({
+        ...current,
+        loading: !current.video,
+        loadingMeta: true,
+        error: '',
+      }))
       try {
         const data = await fetchJson(`${API_BASE}/video/${videoId}`)
         if (!cancelled) {
           setState({
-            payload: data,
+            video: data.video ?? prefetchedVideo,
+            related: data.related ?? [],
             loading: false,
+            loadingMeta: false,
             error: '',
             degraded: Boolean(data.degraded),
           })
@@ -435,25 +452,30 @@ function WatchPage({ library }) {
       } catch (error) {
         if (!cancelled) {
           setState({
-            payload: null,
+            video: prefetchedVideo,
+            related: [],
             loading: false,
-            error: error.message || 'This video could not be loaded right now.',
-            degraded: false,
+            loadingMeta: false,
+            error: prefetchedVideo ? '' : error.message || 'This video could not be loaded right now.',
+            degraded: Boolean(prefetchedVideo),
           })
         }
       }
     }
 
+    if (prefetchedVideo) {
+      saveHistory(prefetchedVideo)
+    }
     load()
     return () => {
       cancelled = true
     }
-  }, [saveHistory, videoId])
+  }, [prefetchedVideo, saveHistory, videoId])
 
   if (state.loading) return <LoadingState message="Loading video..." />
-  if (state.error || !state.payload) return <ErrorState message={state.error || 'Video unavailable.'} />
+  if (state.error || !state.video) return <ErrorState message={state.error || 'Video unavailable.'} />
 
-  const { video, related } = state.payload
+  const { video, related } = state
   const inWatchLater = library.isSaved(library.watchLater, video.videoId)
   const isLiked = library.isSaved(library.liked, video.videoId)
 
@@ -478,9 +500,26 @@ function WatchPage({ library }) {
               <span>{video.ago || video.uploadDate || 'Recently uploaded'}</span>
               <span>{video.timestamp}</span>
             </div>
-            {state.degraded ? (
-              <div className="status-banner">Metadata is partially degraded, but playback is live.</div>
-            ) : null}
+            <div className="watch-panels">
+              <div className="watch-summary-card">
+                <p className="watch-summary-label">Channel</p>
+                <div className="watch-summary-value">{video.author.name}</div>
+                <p className="watch-summary-copy">
+                  {state.loadingMeta
+                    ? 'Refreshing WuTube metadata...'
+                    : state.degraded
+                      ? 'WuTube is using fallback metadata for this video.'
+                      : 'Live metadata loaded from the current video source.'}
+                </p>
+              </div>
+              <div className="watch-summary-card">
+                <p className="watch-summary-label">Playback</p>
+                <div className="watch-summary-value">Embedded</div>
+                <p className="watch-summary-copy">
+                  If the player refuses to start, use the YouTube button below for the direct page.
+                </p>
+              </div>
+            </div>
             <div className="action-row">
               <button className="btn btn-secondary" type="button" onClick={() => library.toggleLiked(video)}>
                 {isLiked ? 'Unlike' : 'Like'}
@@ -493,7 +532,14 @@ function WatchPage({ library }) {
               </a>
             </div>
             <div className="description-card">
-              <p>{video.description || 'No description provided for this video.'}</p>
+              <p className="watch-summary-label">Description</p>
+              <p>{video.description || 'Description is limited on this mirrored watch view.'}</p>
+            </div>
+            <div className="description-card">
+              <p className="watch-summary-label">Discussion</p>
+              <p>
+                Comments are not loaded inside WuTube yet. Use the direct YouTube page when you need the full comment thread.
+              </p>
             </div>
           </div>
         </section>
@@ -556,7 +602,7 @@ function VideoGrid({ videos }) {
   return (
     <div className="video-grid">
       {videos.map((video) => (
-        <Link className="video-card" key={video.videoId} to={`/watch/${video.videoId}`}>
+        <Link className="video-card" key={video.videoId} to={watchHref(video)}>
           <div className="thumb-wrap">
             <img alt={video.title} src={video.thumbnail} />
             <span>{video.timestamp}</span>
@@ -578,7 +624,7 @@ function VideoList({ videos, compact = false }) {
   return (
     <div className={compact ? 'video-list compact' : 'video-list'}>
       {videos.map((video) => (
-        <Link className="list-card" key={video.videoId} to={`/watch/${video.videoId}`}>
+        <Link className="list-card" key={video.videoId} to={watchHref(video)}>
           <div className="list-thumb">
             <img alt={video.title} src={video.thumbnail} />
             <span>{video.timestamp}</span>

@@ -337,13 +337,22 @@ input {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
   gap: 28px;
+  align-items: start;
 }
 
 .watch-main,
-.watch-sidebar,
 .watch-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.watch-sidebar {
   display: grid;
   gap: 16px;
+  align-content: start;
+  position: sticky;
+  top: 100px;
 }
 
 .player-frame iframe {
@@ -360,16 +369,43 @@ input {
   gap: 12px;
 }
 
+.watch-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .action-row {
   margin: 2px 0 6px;
 }
 
+.watch-summary-card,
 .description-card,
 .state-card {
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--card-bg);
+}
+
+.watch-summary-label {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.watch-summary-value {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.watch-summary-copy,
+.description-card p {
+  margin: 0;
 }
 
 .state-card {
@@ -397,7 +433,8 @@ input {
   }
 
   .wutube-quick-strip,
-  .watch-layout {
+  .watch-layout,
+  .watch-panels {
     grid-template-columns: 1fr;
   }
 }
